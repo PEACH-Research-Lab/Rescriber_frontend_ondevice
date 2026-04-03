@@ -3,13 +3,14 @@ document.getElementById("saveButton").addEventListener("click", () => {
     'input[name="apiOption"]:checked'
   ).value;
   const apiKey = document.getElementById("apiKey").value;
+  const ollamaModel = document.getElementById("ollamaModel").value.trim() || "llama3";
 
-  chrome.storage.sync.set({ apiOption, openaiApiKey: apiKey }, () => {
+  chrome.storage.sync.set({ apiOption, openaiApiKey: apiKey, ollamaModel }, () => {
     alert("Settings saved.");
   });
 });
 
-chrome.storage.sync.get(["apiOption", "openaiApiKey"], (result) => {
+chrome.storage.sync.get(["apiOption", "openaiApiKey", "ollamaModel"], (result) => {
   if (result.apiOption) {
     document.querySelector(
       `input[name="apiOption"][value="${result.apiOption}"]`
@@ -17,6 +18,9 @@ chrome.storage.sync.get(["apiOption", "openaiApiKey"], (result) => {
   }
   if (result.apiOption === "own" && result.openaiApiKey) {
     document.getElementById("apiKey").value = result.openaiApiKey;
+  }
+  if (result.ollamaModel) {
+    document.getElementById("ollamaModel").value = result.ollamaModel;
   }
 });
 

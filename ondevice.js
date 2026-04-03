@@ -1,7 +1,15 @@
 // ondevice.js — Calls Ollama via the background service worker.
-// Prompts mirror those in openai.js so both backends produce the same output format.
+// Uses streaming via ports for progressive UI updates.
 
-const OLLAMA_MODEL = "llama3";
+const DEFAULT_OLLAMA_MODEL = "llama3";
+
+async function getOllamaModel() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(["ollamaModel"], (result) => {
+      resolve(result.ollamaModel || DEFAULT_OLLAMA_MODEL);
+    });
+  });
+}
 
 const DETECT_SYSTEM_PROMPT = `Find every piece of personally identifiable information (PII) in the user's message.
 
@@ -37,15 +45,117 @@ const CLUSTER_SYSTEM_PROMPT = `For the given message, find ALL segments of the m
 
 const ABSTRACT_SYSTEM_PROMPT = `Rewrite the text to abstract the protected information. For each protected item, return the original and its abstracted replacement. Do not change other parts of the text. Return ONLY a JSON in the following format: {"results": [{"protected": ORIGINAL_TEXT, "abstracted": REPLACEMENT_TEXT}]}`;
 
-// Helper: send a request to Ollama through the background service worker
-function callOllama(messages, format = "json") {
+// Opens a streaming port to the background worker.
+// Tokens accumulate synchronously; returns a handle for polling.
+function openOllamaStream(messages, format = "json", model) {
+  const state = { accumulated: "", done: false, error: null, stats: null };
+
+  const port = chrome.runtime.connect({ name: "ollama-stream" });
+
+  port.onMessage.addListener((msg) => {
+    if (msg.type === "token") {
+      state.accumulated += msg.content;
+    } else if (msg.type === "done") {
+      state.stats = msg.stats;
+      state.done = true;
+      port.disconnect();
+    } else if (msg.type === "error") {
+      state.error = msg.error;
+      state.done = true;
+      port.disconnect();
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    state.done = true;
+  });
+
+  port.postMessage({ model, messages, format, options: { temperature: 0 } });
+
+  return state;
+}
+
+// Polls a stream, calling onNewResults each time JSON parse yields more results.
+// Uses setTimeout to yield to the browser so DOM updates paint between callbacks.
+async function pollStreamForResults(state, parseResults, onNewResults) {
+  let lastCount = 0;
+  while (!state.done) {
+    // Yield to browser — allows DOM to paint between callbacks
+    await new Promise((r) => setTimeout(r, 100));
+
+    if (onNewResults) {
+      try {
+        const results = parseResults(state.accumulated);
+        if (results && results.length > lastCount) {
+          lastCount = results.length;
+          await onNewResults(results);
+        }
+      } catch {
+        // Incomplete JSON, keep waiting
+      }
+    }
+  }
+
+  if (state.error) throw new Error(state.error);
+
+  // Final parse after stream completes
+  let finalResults;
+  try {
+    finalResults = parseResults(state.accumulated);
+  } catch {
+    finalResults = null;
+  }
+
+  // Fire one last callback if there are new results
+  if (onNewResults && finalResults && finalResults.length > lastCount) {
+    await onNewResults(finalResults);
+  }
+
+  return { content: state.accumulated, results: finalResults, stats: state.stats };
+}
+
+// Extract completed JSON objects from a partial/incomplete JSON stream.
+// Finds each {...} that contains the expected keys, without needing the
+// outer array or object to be closed yet.
+function extractCompletedObjects(accumulated, requiredKeys) {
+  const results = [];
+  let depth = 0;
+  let objStart = -1;
+
+  for (let i = 0; i < accumulated.length; i++) {
+    const ch = accumulated[i];
+    if (ch === "{") {
+      if (depth === 1) objStart = i; // inside the results array
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 1 && objStart !== -1) {
+        const objStr = accumulated.slice(objStart, i + 1);
+        try {
+          const obj = JSON.parse(objStr);
+          if (requiredKeys.every((k) => k in obj)) {
+            results.push(obj);
+          }
+        } catch {
+          // Incomplete object, skip
+        }
+        objStart = -1;
+      }
+    }
+  }
+  return results;
+}
+
+// Non-streaming fallback (used for cluster)
+async function callOllama(messages, format = "json") {
+  const model = await getOllamaModel();
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
       {
         type: "ollama",
         endpoint: "/api/chat",
         payload: {
-          model: OLLAMA_MODEL,
+          model,
           messages,
           stream: false,
           format,
@@ -70,29 +180,27 @@ function callOllama(messages, format = "json") {
 export async function getOnDeviceResponseDetect(userMessage, onResultCallback) {
   console.log("[ondevice:detect] Input:", userMessage.slice(0, 200));
   const t0 = performance.now();
+  const model = await getOllamaModel();
 
-  const response = await callOllama([
-    { role: "system", content: DETECT_SYSTEM_PROMPT },
-    { role: "user", content: userMessage },
-  ]);
+  const stream = openOllamaStream(
+    [
+      { role: "system", content: DETECT_SYSTEM_PROMPT },
+      { role: "user", content: userMessage },
+    ],
+    "json",
+    model
+  );
+
+  const { content, results } = await pollStreamForResults(
+    stream,
+    (accumulated) => extractCompletedObjects(accumulated, ["entity_type", "text"]),
+    onResultCallback
+  );
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[ondevice:detect] Raw response (${ms}ms):`, response.message?.content);
-
-  let content;
-  try {
-    content = JSON.parse(response.message.content);
-  } catch (e) {
-    console.error("[ondevice:detect] JSON parse failed:", response.message?.content, e);
-    return [];
-  }
-
-  const results = content.results || [];
-  console.log(`[ondevice:detect] Parsed ${results.length} entities:`, results);
-  if (results.length > 0 && onResultCallback) {
-    await onResultCallback(results);
-  }
-  return results;
+  console.log(`[ondevice:detect] Response (${ms}ms):`, content);
+  console.log(`[ondevice:detect] Parsed ${results?.length || 0} entities:`, results);
+  return results || [];
 }
 
 export async function getOnDeviceResponseCluster(userMessageCluster) {
@@ -129,25 +237,24 @@ export async function getOnDeviceAbstractResponse(
   const userPrompt = `Text: ${currentMessage}\nProtected information: ${abstractList.join(", ")}`;
   console.log("[ondevice:abstract] Input:", userPrompt.slice(0, 200));
   const t0 = performance.now();
+  const model = await getOllamaModel();
 
-  const response = await callOllama([
-    { role: "system", content: ABSTRACT_SYSTEM_PROMPT },
-    { role: "user", content: userPrompt },
-  ]);
+  const stream = openOllamaStream(
+    [
+      { role: "system", content: ABSTRACT_SYSTEM_PROMPT },
+      { role: "user", content: userPrompt },
+    ],
+    "json",
+    model
+  );
+
+  const { content, results } = await pollStreamForResults(
+    stream,
+    (accumulated) => extractCompletedObjects(accumulated, ["protected", "abstracted"]),
+    onResultCallback
+  );
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[ondevice:abstract] Raw response (${ms}ms):`, response.message?.content);
-
-  let content;
-  try {
-    content = JSON.parse(response.message.content);
-  } catch (e) {
-    console.error("[ondevice:abstract] JSON parse failed:", response.message?.content, e);
-    return;
-  }
-
-  console.log("[ondevice:abstract] Parsed results:", content.results);
-  if (content.results && onResultCallback) {
-    await onResultCallback(content.results);
-  }
+  console.log(`[ondevice:abstract] Response (${ms}ms):`, content);
+  console.log("[ondevice:abstract] Parsed results:", results);
 }
