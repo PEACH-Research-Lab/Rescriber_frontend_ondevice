@@ -308,10 +308,9 @@ observer.observe(document.body, {
 setInterval(() => {
   document
     .querySelectorAll(
-      '[data-message-author-role="assistant"]:not([data-replaced])'
+      '[data-message-author-role="assistant"]:not([data-replaced]), [data-message-author-role="user"]:not([data-replaced])'
     )
     .forEach((element) => {
-      console.log("Polling detected unprocessed assistant message:", element);
       enqueueAndReplace(element);
     });
 }, 500);

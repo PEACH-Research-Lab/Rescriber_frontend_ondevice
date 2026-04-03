@@ -984,54 +984,60 @@ window.helper = {
     function replaceTextRecursively(node) {
       node.childNodes.forEach((child) => {
         if (child.nodeType === Node.TEXT_NODE) {
-          let originalText = child.textContent;
-          for (let [placeholder, pii] of sortedPiiMappings) {
-            const regexCurly = new RegExp(
-              `\\[${escapeRegExp(placeholder)}\\]`,
-              "g"
-            );
-            const regexPlain = new RegExp(
-              `\\b${escapeRegExp(placeholder)}\\b`,
-              "g"
-            );
+          const text = child.textContent;
 
-            originalText = originalText.replace(regexCurly, pii);
-            originalText = originalText.replace(regexPlain, pii);
+          // Build a regex that matches placeholder patterns: [NAME1] or bare NAME1
+          const placeholderPatterns = sortedPiiMappings.map(
+            ([placeholder]) =>
+              `\\[${escapeRegExp(placeholder)}\\]|\\b${escapeRegExp(placeholder)}\\b`
+          );
+          if (placeholderPatterns.length === 0) return;
+
+          const combinedRegex = new RegExp(
+            placeholderPatterns.join("|"),
+            "g"
+          );
+
+          if (!combinedRegex.test(text)) return;
+          combinedRegex.lastIndex = 0;
+
+          // Build a lookup from placeholder (with or without brackets) to its entry
+          const placeholderLookup = {};
+          for (const [placeholder, pii] of sortedPiiMappings) {
+            placeholderLookup[`[${placeholder}]`] = { placeholder, pii };
+            placeholderLookup[placeholder] = { placeholder, pii };
           }
 
-          if (child.textContent !== originalText) {
-            const fragment = document.createDocumentFragment();
-            let lastIndex = 0;
+          const fragment = document.createDocumentFragment();
+          let lastIndex = 0;
+          let match;
 
-            const combinedRegex = new RegExp(
-              sortedPiiMappings.map(([, pii]) => escapeRegExp(pii)).join("|"),
-              "g"
-            );
+          while ((match = combinedRegex.exec(text)) !== null) {
+            const matched = match[0];
+            const offset = match.index;
 
-            originalText.replace(combinedRegex, (match, offset) => {
-              if (offset > lastIndex) {
-                fragment.appendChild(
-                  document.createTextNode(originalText.slice(lastIndex, offset))
-                );
-              }
-
-              const span = document.createElement("span");
-              span.className = "highlight-pii-in-displayed-message";
-              span.style.backgroundColor = bgColor;
-              span.textContent = match;
-
-              const placeholder = sortedPiiMappings.find(
-                ([, value]) => value === match
-              )[0];
-              span.setAttribute("data-placeholder", placeholder);
-
-              fragment.appendChild(span);
-              lastIndex = offset + match.length;
-            });
-
-            if (lastIndex < originalText.length) {
+            // Add preceding text
+            if (offset > lastIndex) {
               fragment.appendChild(
-                document.createTextNode(originalText.slice(lastIndex))
+                document.createTextNode(text.slice(lastIndex, offset))
+              );
+            }
+
+            const entry = placeholderLookup[matched];
+            const span = document.createElement("span");
+            span.className = "highlight-pii-in-displayed-message";
+            span.style.backgroundColor = bgColor;
+            span.textContent = entry.pii;
+            span.setAttribute("data-placeholder", entry.placeholder);
+
+            fragment.appendChild(span);
+            lastIndex = offset + matched.length;
+          }
+
+          if (lastIndex > 0) {
+            if (lastIndex < text.length) {
+              fragment.appendChild(
+                document.createTextNode(text.slice(lastIndex))
               );
             }
             child.replaceWith(fragment);
