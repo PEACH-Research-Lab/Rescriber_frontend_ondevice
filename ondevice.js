@@ -146,6 +146,35 @@ function extractCompletedObjects(accumulated, requiredKeys) {
   return results;
 }
 
+// --- Chunking for long messages ---
+// ~4 chars per token on average, 6K tokens ≈ 24K chars.
+// System prompt is ~300 tokens, so we budget ~5700 tokens ≈ 22800 chars for user text.
+const MAX_CHUNK_CHARS = 22800;
+
+function splitIntoChunks(text) {
+  if (text.length <= MAX_CHUNK_CHARS) return [text];
+
+  // Split by sentence boundaries: ., !, ?, or newline followed by space/newline/end
+  const sentenceEnds = /(?<=[.!?\n])\s+/g;
+  const sentences = text.split(sentenceEnds);
+
+  const chunks = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    if (current.length + sentence.length > MAX_CHUNK_CHARS && current.length > 0) {
+      chunks.push(current.trim());
+      current = "";
+    }
+    current += (current ? " " : "") + sentence;
+  }
+  if (current.trim()) {
+    chunks.push(current.trim());
+  }
+
+  return chunks;
+}
+
 // Non-streaming fallback (used for cluster)
 async function callOllama(messages, format = "json") {
   const model = await getOllamaModel();
@@ -181,26 +210,43 @@ export async function getOnDeviceResponseDetect(userMessage, onResultCallback) {
   console.log("[ondevice:detect] Input:", userMessage.slice(0, 200));
   const t0 = performance.now();
   const model = await getOllamaModel();
+  const chunks = splitIntoChunks(userMessage);
+  const allResults = [];
 
-  const stream = openOllamaStream(
-    [
-      { role: "system", content: DETECT_SYSTEM_PROMPT },
-      { role: "user", content: userMessage },
-    ],
-    "json",
-    model
-  );
+  console.log(`[ondevice:detect] Split into ${chunks.length} chunk(s)`);
 
-  const { content, results } = await pollStreamForResults(
-    stream,
-    (accumulated) => extractCompletedObjects(accumulated, ["entity_type", "text"]),
-    onResultCallback
-  );
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    console.log(`[ondevice:detect] Chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+
+    const stream = openOllamaStream(
+      [
+        { role: "system", content: DETECT_SYSTEM_PROMPT },
+        { role: "user", content: chunk },
+      ],
+      "json",
+      model
+    );
+
+    const { results: chunkResults } = await pollStreamForResults(
+      stream,
+      (accumulated) => extractCompletedObjects(accumulated, ["entity_type", "text"]),
+      // Progressive callback: merge chunk results with previous chunks
+      (newChunkResults) => {
+        if (onResultCallback) {
+          onResultCallback([...allResults, ...newChunkResults]);
+        }
+      }
+    );
+
+    if (chunkResults && chunkResults.length > 0) {
+      allResults.push(...chunkResults);
+    }
+  }
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[ondevice:detect] Response (${ms}ms):`, content);
-  console.log(`[ondevice:detect] Parsed ${results?.length || 0} entities:`, results);
-  return results || [];
+  console.log(`[ondevice:detect] Done (${ms}ms): ${allResults.length} entities across ${chunks.length} chunk(s)`);
+  return allResults;
 }
 
 export async function getOnDeviceResponseCluster(userMessageCluster) {
