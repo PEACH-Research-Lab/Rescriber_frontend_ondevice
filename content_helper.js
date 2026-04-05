@@ -1049,10 +1049,183 @@ window.helper = {
     }
 
     if (element.matches('[data-message-author-role="assistant"]')) {
+      // Process regular (non-writing-block) content
       element
         .querySelectorAll("p, li, div, span, strong, em, u, b, i")
         .forEach((el) => {
+          // Skip elements inside writing blocks — handled separately below
+          if (el.closest('[data-writing-block="true"]')) return;
           replaceTextRecursively(el);
+        });
+
+      // Handle writing blocks (editable views like email drafts)
+      element
+        .querySelectorAll('[data-writing-block="true"]')
+        .forEach((block) => {
+          // Replace placeholders in textarea elements (e.g., subject line)
+          block.querySelectorAll("textarea").forEach((textarea) => {
+            let val = textarea.value;
+            let changed = false;
+            for (const [placeholder, pii] of sortedPiiMappings) {
+              const bracketedRegex = new RegExp(
+                `\\[${escapeRegExp(placeholder)}\\]`,
+                "g"
+              );
+              const bareRegex = new RegExp(
+                `\\b${escapeRegExp(placeholder)}\\b`,
+                "g"
+              );
+              const newVal = val
+                .replace(bracketedRegex, pii)
+                .replace(bareRegex, pii);
+              if (newVal !== val) {
+                val = newVal;
+                changed = true;
+              }
+            }
+            if (changed) {
+              textarea.value = val;
+              textarea.dispatchEvent(new Event("input", { bubbles: true }));
+            }
+          });
+
+          // ProseMirror strips inline DOM modifications, so we use a positioned
+          // overlay approach: place highlight divs on top of PII text without
+          // touching ProseMirror's DOM.
+          const proseMirror = block.querySelector(".ProseMirror");
+          if (!proseMirror) return;
+
+          // First, ensure placeholders in text are replaced with PII values.
+          // ProseMirror preserves text changes even though it strips span wrappers.
+          const placeholderTokenSpans = block.querySelectorAll(
+            "span[data-placeholder-token]"
+          );
+          placeholderTokenSpans.forEach((span) => {
+            const text = span.textContent;
+            for (const [placeholder, pii] of sortedPiiMappings) {
+              if (text === `[${placeholder}]` || text === placeholder) {
+                span.textContent = pii;
+                break;
+              }
+            }
+          });
+
+          // Build PII entries for overlay matching (reverse lookup: PII value → placeholder)
+          const piiEntries = sortedPiiMappings
+            .filter(([, pii]) => pii.length > 0)
+            .map(([placeholder, pii]) => ({
+              placeholder,
+              pii,
+              regex: new RegExp(escapeRegExp(pii), "g"),
+            }));
+
+          function buildOverlay() {
+            const editorWrapper =
+              proseMirror.closest(".writing-block-editor") ||
+              proseMirror.parentElement;
+            if (!editorWrapper) return;
+
+            // Remove existing overlay
+            const old = editorWrapper.querySelector(".pii-wb-overlay");
+            if (old) old.remove();
+
+            // Ensure parent is positioned for absolute children
+            if (
+              window.getComputedStyle(editorWrapper).position === "static"
+            ) {
+              editorWrapper.style.position = "relative";
+            }
+
+            const overlay = document.createElement("div");
+            overlay.className = "pii-wb-overlay";
+            overlay.style.cssText =
+              "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;";
+
+            const wrapperRect = editorWrapper.getBoundingClientRect();
+
+            // Walk text nodes in ProseMirror to find PII values
+            const walker = document.createTreeWalker(
+              proseMirror,
+              NodeFilter.SHOW_TEXT
+            );
+            while (walker.nextNode()) {
+              const textNode = walker.currentNode;
+              const text = textNode.textContent;
+
+              for (const entry of piiEntries) {
+                entry.regex.lastIndex = 0;
+                let match;
+                while ((match = entry.regex.exec(text)) !== null) {
+                  const range = document.createRange();
+                  range.setStart(textNode, match.index);
+                  range.setEnd(textNode, match.index + entry.pii.length);
+
+                  const clientRects = range.getClientRects();
+                  for (const rect of clientRects) {
+                    const cs = window.getComputedStyle(
+                      textNode.parentElement
+                    );
+                    const hl = document.createElement("div");
+                    hl.className = "highlight-pii-in-displayed-message";
+                    hl.setAttribute("data-placeholder", entry.placeholder);
+                    hl.style.cssText = [
+                      "position:absolute",
+                      `top:${rect.top - wrapperRect.top}px`,
+                      `left:${rect.left - wrapperRect.left}px`,
+                      `height:${rect.height}px`,
+                      `background-color:${bgColor}`,
+                      "pointer-events:auto",
+                      "cursor:pointer",
+                      "border-radius:3px",
+                      `font-size:${cs.fontSize}`,
+                      `font-family:${cs.fontFamily}`,
+                      `font-weight:${cs.fontWeight}`,
+                      `line-height:${rect.height}px`,
+                      `letter-spacing:${cs.letterSpacing}`,
+                      `color:${cs.color}`,
+                      "white-space:pre",
+                      "padding:0 1px",
+                    ].join(";");
+                    hl.textContent = entry.pii;
+
+                    hl.addEventListener("mouseenter", () => {
+                      hl.textContent = entry.placeholder;
+                      hl.style.backgroundColor = placeholderBgColor;
+                    });
+                    hl.addEventListener("mouseleave", () => {
+                      hl.textContent = entry.pii;
+                      hl.style.backgroundColor = bgColor;
+                    });
+
+                    overlay.appendChild(hl);
+                  }
+                  range.detach();
+                }
+              }
+            }
+
+            if (overlay.children.length > 0) {
+              editorWrapper.appendChild(overlay);
+            }
+          }
+
+          // Build overlay after a short delay to let ProseMirror settle
+          setTimeout(buildOverlay, 150);
+
+          // Rebuild overlay when ProseMirror content changes
+          if (!proseMirror.hasAttribute("data-pii-observed")) {
+            proseMirror.setAttribute("data-pii-observed", "true");
+            let rebuildTimeout;
+            const pmObserver = new MutationObserver(() => {
+              clearTimeout(rebuildTimeout);
+              rebuildTimeout = setTimeout(buildOverlay, 200);
+            });
+            pmObserver.observe(proseMirror, {
+              childList: true,
+              subtree: true,
+              characterData: true,
+            });
+          }
         });
     } else if (element.matches('[data-message-author-role="user"]')) {
       element.querySelectorAll("div").forEach((el) => {
@@ -1060,19 +1233,22 @@ window.helper = {
       });
     }
 
-    const spans = element.querySelectorAll(
-      "span.highlight-pii-in-displayed-message"
-    );
-    spans.forEach((span) => {
-      const placeholder = span.getAttribute("data-placeholder");
-      span.addEventListener("mouseenter", () => {
-        span.textContent = placeholder;
-        span.style.backgroundColor = placeholderBgColor;
+    // Bind hover events for regular (non-writing-block) highlight spans
+    element
+      .querySelectorAll(
+        "span.highlight-pii-in-displayed-message:not([data-pii-hover-bound])"
+      )
+      .forEach((span) => {
+        span.setAttribute("data-pii-hover-bound", "true");
+        const placeholder = span.getAttribute("data-placeholder");
+        span.addEventListener("mouseenter", () => {
+          span.textContent = placeholder;
+          span.style.backgroundColor = placeholderBgColor;
+        });
+        span.addEventListener("mouseleave", () => {
+          span.textContent = piiMappings[placeholder];
+          span.style.backgroundColor = bgColor;
+        });
       });
-      span.addEventListener("mouseleave", () => {
-        span.textContent = piiMappings[placeholder];
-        span.style.backgroundColor = bgColor;
-      });
-    });
   },
 };

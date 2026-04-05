@@ -313,6 +313,21 @@ setInterval(() => {
     .forEach((element) => {
       enqueueAndReplace(element);
     });
+
+  // Detect writing blocks that appeared after the message was already processed
+  document
+    .querySelectorAll('[data-message-author-role="assistant"][data-replaced]')
+    .forEach((element) => {
+      const unprocessedBlocks = element.querySelectorAll(
+        '[data-writing-block="true"]:not([data-pii-wb-processed])'
+      );
+      if (unprocessedBlocks.length > 0) {
+        unprocessedBlocks.forEach((b) =>
+          b.setAttribute("data-pii-wb-processed", "true")
+        );
+        window.helper.checkMessageRenderedAndReplace(element);
+      }
+    });
 }, 500);
 
 function observeStopButton() {
