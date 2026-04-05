@@ -188,9 +188,20 @@ setInterval(async () => {
 const processingQueue = [];
 let isProcessing = false;
 
+function isStreaming() {
+  return !!document.querySelector('button[data-testid="stop-button"]');
+}
+
 function enqueueAndReplace(target) {
   // If the target element has already been processed, return early
   if (!target || target.hasAttribute("data-replaced")) return;
+
+  // Don't replace assistant messages while still streaming — the DOM
+  // replacement is destructive and corrupts partially-received text.
+  // These will be picked up once streaming finishes.
+  const isAssistant =
+    target.getAttribute("data-message-author-role") === "assistant";
+  if (isAssistant && isStreaming()) return;
 
   // Mark the target as processed to avoid duplicate additions
   target.setAttribute("data-replaced", "true");
@@ -331,17 +342,30 @@ setInterval(() => {
 }, 500);
 
 function observeStopButton() {
+  let wasStreaming = false;
+
   const stopButtonObserver = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      const stopButton = document.querySelector(
-        'button[data-testid="stop-button"]'
-      );
-      if (stopButton) {
-        // Once user send out the message, then stop button would show up, and send button will be replaced
-        // then we remove tooltip and panel
-        removeTooltipAndPanel();
-      }
-    });
+    const stopButton = document.querySelector(
+      'button[data-testid="stop-button"]'
+    );
+    if (stopButton) {
+      wasStreaming = true;
+      // Once user send out the message, then stop button would show up, and send button will be replaced
+      // then we remove tooltip and panel
+      removeTooltipAndPanel();
+    } else if (wasStreaming) {
+      // Stop button disappeared — streaming just finished.
+      // Now it's safe to run replacement on assistant messages that
+      // were skipped during streaming.
+      wasStreaming = false;
+      document
+        .querySelectorAll(
+          '[data-message-author-role="assistant"]:not([data-replaced])'
+        )
+        .forEach((el) => {
+          enqueueAndReplace(el);
+        });
+    }
   });
 
   stopButtonObserver.observe(document.body, {
@@ -390,6 +414,7 @@ async function checkAllMessagesForReplacement() {
 // Call the initialize function when the content script loads and the DOM is ready
 window.addEventListener("load", async () => {
   await window.helper.getEnabledStatus();
+  await window.helper.loadDetectionMode();
   enabled = window.helper.enabled;
   initialize();
   checkAllMessagesForReplacement();
