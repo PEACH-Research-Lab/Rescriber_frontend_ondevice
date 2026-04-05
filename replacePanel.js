@@ -53,6 +53,14 @@ export function createPIIReplacementPanel(
             <input type="checkbox" id="select-all-checkbox">
           </div>`
           }
+          <button id="dashboard-btn" title="Privacy Dashboard">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="1" y="8" width="3" height="6" rx="0.5"/>
+              <rect x="6.5" y="4" width="3" height="10" rx="0.5"/>
+              <rect x="12" y="1" width="3" height="13" rx="0.5"/>
+            </svg>
+            Stats
+          </button>
           <button id="close-panel-btn">X</button>
         </div>
       </div>
@@ -141,6 +149,10 @@ export function createPIIReplacementPanel(
 
   document.getElementById("close-panel-btn").addEventListener("click", () => {
     panel.style.display = "none";
+  });
+
+  document.getElementById("dashboard-btn").addEventListener("click", async () => {
+    await window.helper.showDashboard();
   });
 
   const highlightButton = document.getElementById("highlight-btn");

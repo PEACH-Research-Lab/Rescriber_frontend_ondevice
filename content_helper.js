@@ -31,6 +31,112 @@ window.helper = {
   addAbstractCount() {
     this.abstractCount = this.abstractCount + 1;
   },
+
+  // Dashboard data methods
+
+  async getDashboardData() {
+    try {
+      const data = await this.getFromStorage(null);
+      const piiToPlaceholder = data.piiToPlaceholder || {};
+      const entityCounts = data.entityCounts || {};
+      const actionHistory = data.actionHistory || [];
+
+      // === Detected PIIs: aggregate from piiToPlaceholder across ALL conversations ===
+      const totalByType = {};
+      let totalPIIs = 0;
+      const conversationIds = new Set();
+
+      for (const convId of Object.keys(piiToPlaceholder)) {
+        if (convId === "no-url") continue;
+        const mappings = piiToPlaceholder[convId];
+        if (!mappings || typeof mappings !== "object") continue;
+        conversationIds.add(convId);
+
+        for (const placeholder of Object.values(mappings)) {
+          // Parse type from placeholder like "NAME1" -> "NAME", "PHONE_NUMBER2" -> "PHONE_NUMBER"
+          const type = placeholder.replace(/[0-9]+$/, "");
+          if (type) {
+            totalByType[type] = (totalByType[type] || 0) + 1;
+            totalPIIs++;
+          }
+        }
+      }
+
+      // Also count from entityCounts for conversations that may not have piiToPlaceholder entries
+      for (const convId of Object.keys(entityCounts)) {
+        if (convId === "no-url" || conversationIds.has(convId)) continue;
+        conversationIds.add(convId);
+        for (const [type, count] of Object.entries(entityCounts[convId])) {
+          totalByType[type] = (totalByType[type] || 0) + count;
+          totalPIIs += count;
+        }
+      }
+
+      const conversationCount = conversationIds.size;
+
+      // === Protected PIIs: aggregate from actionHistory ===
+      let totalReplaced = 0;
+      let totalAbstracted = 0;
+      const actionsByDay = {};
+      const typeActions = { replace: {}, abstract: {} };
+      const protectedPIISet = new Set(); // track unique protected PIIs
+
+      for (const entry of actionHistory) {
+        const count = entry.count || 1;
+        if (entry.action === "replace") {
+          totalReplaced += count;
+        } else if (entry.action === "abstract") {
+          totalAbstracted += count;
+        }
+
+        // Track unique protected PIIs
+        if (entry.piiTexts) {
+          entry.piiTexts.forEach((t) => protectedPIISet.add(t));
+        }
+
+        // Group by day for timeline
+        const day = new Date(entry.timestamp).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        if (!actionsByDay[day]) {
+          actionsByDay[day] = { replace: 0, abstract: 0 };
+        }
+        actionsByDay[day][entry.action] += count;
+
+        // Group by type per action
+        if (entry.entityTypes) {
+          for (const t of entry.entityTypes) {
+            typeActions[entry.action][t] =
+              (typeActions[entry.action][t] || 0) + 1;
+          }
+        }
+      }
+
+      return {
+        totalPIIs,
+        totalReplaced,
+        totalAbstracted,
+        totalByType,
+        conversationCount,
+        actionsByDay,
+        typeActions,
+        actionHistory,
+        uniqueProtected: protectedPIISet.size,
+      };
+    } catch (error) {
+      console.error("Error getting dashboard data:", error);
+      return null;
+    }
+  },
+
+  async showDashboard() {
+    const { createDashboardPanel } = await import(
+      chrome.runtime.getURL("dashboardPanel.js")
+    );
+    const dashboardData = await this.getDashboardData();
+    createDashboardPanel(dashboardData);
+  },
   async initializeMappings() {
     try {
       const data = await this.getFromStorage(null);
@@ -795,6 +901,7 @@ window.helper = {
     currentMessage,
     abstractList
   ) {
+    let lastPairs = [];
     const onResultCallback = (partialAbstractResponse) => {
       const input = this.getUserInputElement();
       if (input) {
@@ -806,6 +913,12 @@ window.helper = {
         );
         this.currentUserMessage = input.innerText;
       }
+      // Keep the latest complete set of pairs for storage
+      if (Array.isArray(partialAbstractResponse)) {
+        lastPairs = partialAbstractResponse.filter((item) =>
+          abstractList.includes(item.protected)
+        );
+      }
     };
 
     await this.getAbstractResponse(
@@ -814,6 +927,38 @@ window.helper = {
       abstractList,
       onResultCallback
     );
+
+    // Persist abstract mappings so rendered messages can be matched later
+    if (lastPairs.length > 0) {
+      await this.saveAbstractMappings(lastPairs);
+    }
+  },
+
+  // Store abstractedText → { original, type } in local storage so that
+  // rendered user messages containing the abstracted text can be detected
+  // and counted as confirmed abstract actions.
+  async saveAbstractMappings(pairs) {
+    try {
+      const conversationId = this.getActiveConversationId() || "no-url";
+      const data = await this.getFromStorage(["abstractMappings"]);
+      const allMappings = data.abstractMappings || {};
+      const convMappings = allMappings[conversationId] || {};
+
+      for (const { protected: original, abstracted } of pairs) {
+        if (abstracted && original) {
+          const type =
+            this.currentEntities
+              .find((e) => e.text === original)
+              ?.entity_type.replace(/[0-9]+$/, "") || "UNKNOWN";
+          convMappings[abstracted] = { original, type };
+        }
+      }
+
+      allMappings[conversationId] = convMappings;
+      await this.setToStorage({ abstractMappings: allMappings });
+    } catch (error) {
+      console.error("Error saving abstract mappings:", error);
+    }
   },
 
   getAbstractResponse: async function (
@@ -948,12 +1093,138 @@ window.helper = {
         data.piiToPlaceholder?.[activeConversationId] || {};
       const placeholderToPii =
         data.placeholderToPii?.[activeConversationId] || {};
+      const abstractMappings =
+        data.abstractMappings?.[activeConversationId] || {};
+
+      // For user messages, detect confirmed replace/abstract actions
+      // from the actual sent prompt before the display-replacement runs
+      const isUserMessage =
+        element.getAttribute("data-message-author-role") === "user";
+      if (isUserMessage) {
+        await this.inferActionsFromRenderedMessage(
+          element,
+          placeholderToPii,
+          abstractMappings,
+          activeConversationId
+        );
+      }
 
       // Update current entities by using the mappings from cloud
       this.updateCurrentEntitiesByPIIMappings(piiToPlaceholder);
       this.replaceTextInElement(element, placeholderToPii);
     } catch (error) {
       console.error("Error fetching PII mappings:", error);
+    }
+  },
+
+  // Scan a rendered user message to confirm replace and abstract actions.
+  // Called before replaceTextInElement swaps placeholders for display,
+  // so the raw text still contains [NAME1] / abstracted text as actually sent.
+  //
+  // Replace: placeholders like [NAME1] found in the text prove the user
+  //   sent the redacted version.
+  // Abstract: abstracted text found in the text (matched via abstractMappings)
+  //   proves the user sent the generalized version.
+  inferActionsFromRenderedMessage: async function (
+    element,
+    placeholderToPii,
+    abstractMappings,
+    conversationId
+  ) {
+    // Skip if we already processed this element
+    if (element.hasAttribute("data-actions-inferred")) return;
+    element.setAttribute("data-actions-inferred", "true");
+
+    const text = element.textContent || "";
+
+    try {
+      const data = await this.getFromStorage(["actionHistory"]);
+      const history = data.actionHistory || [];
+      let changed = false;
+
+      // Build sets of already-logged PII texts for this conversation
+      const loggedReplacePIIs = new Set();
+      const loggedAbstractPIIs = new Set();
+      for (const entry of history) {
+        if (entry.conversationId !== conversationId || !entry.piiTexts)
+          continue;
+        const set =
+          entry.action === "replace" ? loggedReplacePIIs : loggedAbstractPIIs;
+        entry.piiTexts.forEach((t) => set.add(t));
+      }
+
+      // --- Replace detection ---
+      const foundPlaceholders = [];
+      for (const [placeholder, piiValue] of Object.entries(placeholderToPii)) {
+        if (loggedReplacePIIs.has(piiValue)) continue;
+        const escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(
+          `\\[${escaped}\\]|\\b${escaped}\\b`,
+          "g"
+        );
+        if (regex.test(text)) {
+          foundPlaceholders.push({
+            piiValue,
+            type: placeholder.replace(/[0-9]+$/, ""),
+          });
+        }
+      }
+
+      if (foundPlaceholders.length > 0) {
+        history.push({
+          action: "replace",
+          timestamp: Date.now(),
+          conversationId,
+          entityTypes: foundPlaceholders.map((e) => e.type),
+          count: foundPlaceholders.length,
+          piiTexts: foundPlaceholders.map((e) => e.piiValue),
+        });
+        changed = true;
+        console.log(
+          `Dashboard: confirmed ${foundPlaceholders.length} replace action(s) from sent message`
+        );
+      }
+
+      // --- Abstract detection ---
+      // abstractMappings maps abstractedText → { original, type }.
+      // If the abstracted text appears in the rendered message, the user
+      // actually sent the generalized version.
+      const foundAbstracts = [];
+      for (const [abstractedText, info] of Object.entries(abstractMappings)) {
+        if (loggedAbstractPIIs.has(info.original)) continue;
+        const escaped = abstractedText.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&"
+        );
+        const regex = new RegExp(escaped, "g");
+        if (regex.test(text)) {
+          foundAbstracts.push({
+            piiValue: info.original,
+            type: info.type,
+          });
+        }
+      }
+
+      if (foundAbstracts.length > 0) {
+        history.push({
+          action: "abstract",
+          timestamp: Date.now(),
+          conversationId,
+          entityTypes: foundAbstracts.map((e) => e.type),
+          count: foundAbstracts.length,
+          piiTexts: foundAbstracts.map((e) => e.piiValue),
+        });
+        changed = true;
+        console.log(
+          `Dashboard: confirmed ${foundAbstracts.length} abstract action(s) from sent message`
+        );
+      }
+
+      if (changed) {
+        await this.setToStorage({ actionHistory: history });
+      }
+    } catch (error) {
+      console.error("Error inferring actions from rendered message:", error);
     }
   },
 

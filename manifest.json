@@ -29,6 +29,7 @@
         "replacePanel.js",
         "ui.css",
         "buttonWidget.js",
+        "dashboardPanel.js",
         "getProvidedApiKey.js",
         "images/check4.png",
         "images/magnifier5.png",
