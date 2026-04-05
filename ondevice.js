@@ -44,7 +44,14 @@ const CLUSTER_SYSTEM_PROMPT = `For the given message, find ALL segments of the m
   Expected JSON output:
   {'Bill Gates': ['Bill Gates', 'Microsoft'], 'jeremyKwon@gmail.com':['jeremyKwon@gmail.com']}`;
 
-const ABSTRACT_SYSTEM_PROMPT = `Rewrite the text to abstract the protected information. For each protected item, return the original and its abstracted replacement. Do not change other parts of the text. Return ONLY a JSON in the following format: {"results": [{"protected": ORIGINAL_TEXT, "abstracted": REPLACEMENT_TEXT}]}`;
+const ABSTRACT_SYSTEM_PROMPT = `Replace each protected item with a vaguer, more general description that fits naturally as a drop-in replacement. Do not add extra words.
+- Names → role/relation ("Jennie"→"a friend")
+- Places → broader region ("Korea"→"East Asia", "Mountain View"→"a city in California")
+- Ages → range ("20 years old"→"in our early twenties")
+- Health → general ("allergic to alcohol"→"has a health concern")
+- Other → generalize to category
+
+Return ONLY: {"results": [{"protected": ORIGINAL, "abstracted": REPLACEMENT}]}`;
 
 // Opens a streaming port to the background worker.
 // Tokens accumulate synchronously; returns a handle for polling.
