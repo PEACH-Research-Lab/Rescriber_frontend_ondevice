@@ -959,6 +959,44 @@ window.helper = {
     // Persist abstract mappings so rendered messages can be matched later
     if (lastPairs.length > 0) {
       await this.saveAbstractMappings(lastPairs);
+      await this.logAbstractAction(lastPairs);
+    }
+  },
+
+  // Log the abstract action to actionHistory immediately when the user
+  // performs it, rather than waiting until the message is sent and rendered.
+  async logAbstractAction(pairs) {
+    try {
+      const conversationId = this.getActiveConversationId() || "no-url";
+      const data = await this.getFromStorage(["actionHistory"]);
+      const history = data.actionHistory || [];
+
+      const entries = pairs
+        .map(({ protected: original }) => {
+          const type =
+            this.currentEntities
+              .find((e) => e.text === original)
+              ?.entity_type.replace(/[0-9]+$/, "") || "UNKNOWN";
+          return { piiValue: original, type };
+        })
+        .filter(Boolean);
+
+      if (entries.length > 0) {
+        history.push({
+          action: "abstract",
+          timestamp: Date.now(),
+          conversationId,
+          entityTypes: entries.map((e) => e.type),
+          count: entries.length,
+          piiTexts: entries.map((e) => e.piiValue),
+        });
+        await this.setToStorage({ actionHistory: history });
+        console.log(
+          `Dashboard: logged ${entries.length} abstract action(s) immediately`
+        );
+      }
+    } catch (error) {
+      console.error("Error logging abstract action:", error);
     }
   },
 
@@ -1133,10 +1171,8 @@ window.helper = {
         data.piiToPlaceholder?.[activeConversationId] || {};
       const placeholderToPii =
         data.placeholderToPii?.[activeConversationId] || {};
-      const abstractMappings =
-        data.abstractMappings?.[activeConversationId] || {};
 
-      // For user messages, detect confirmed replace/abstract actions
+      // For user messages, detect confirmed replace actions
       // from the actual sent prompt before the display-replacement runs
       const isUserMessage =
         element.getAttribute("data-message-author-role") === "user";
@@ -1144,7 +1180,6 @@ window.helper = {
         await this.inferActionsFromRenderedMessage(
           element,
           placeholderToPii,
-          abstractMappings,
           activeConversationId
         );
       }
@@ -1157,18 +1192,17 @@ window.helper = {
     }
   },
 
-  // Scan a rendered user message to confirm replace and abstract actions.
+  // Scan a rendered user message to confirm replace actions.
   // Called before replaceTextInElement swaps placeholders for display,
-  // so the raw text still contains [NAME1] / abstracted text as actually sent.
+  // so the raw text still contains [NAME1] as actually sent.
   //
   // Replace: placeholders like [NAME1] found in the text prove the user
   //   sent the redacted version.
-  // Abstract: abstracted text found in the text (matched via abstractMappings)
-  //   proves the user sent the generalized version.
+  // Abstract actions are logged immediately when the user clicks Abstract,
+  // so they are not detected here.
   inferActionsFromRenderedMessage: async function (
     element,
     placeholderToPii,
-    abstractMappings,
     conversationId
   ) {
     // Skip if we already processed this element
@@ -1182,15 +1216,16 @@ window.helper = {
       const history = data.actionHistory || [];
       let changed = false;
 
-      // Build sets of already-logged PII texts for this conversation
+      // Build set of already-logged replace PII texts for this conversation
       const loggedReplacePIIs = new Set();
-      const loggedAbstractPIIs = new Set();
       for (const entry of history) {
-        if (entry.conversationId !== conversationId || !entry.piiTexts)
+        if (
+          entry.conversationId !== conversationId ||
+          entry.action !== "replace" ||
+          !entry.piiTexts
+        )
           continue;
-        const set =
-          entry.action === "replace" ? loggedReplacePIIs : loggedAbstractPIIs;
-        entry.piiTexts.forEach((t) => set.add(t));
+        entry.piiTexts.forEach((t) => loggedReplacePIIs.add(t));
       }
 
       // --- Replace detection ---
@@ -1222,41 +1257,6 @@ window.helper = {
         changed = true;
         console.log(
           `Dashboard: confirmed ${foundPlaceholders.length} replace action(s) from sent message`
-        );
-      }
-
-      // --- Abstract detection ---
-      // abstractMappings maps abstractedText → { original, type }.
-      // If the abstracted text appears in the rendered message, the user
-      // actually sent the generalized version.
-      const foundAbstracts = [];
-      for (const [abstractedText, info] of Object.entries(abstractMappings)) {
-        if (loggedAbstractPIIs.has(info.original)) continue;
-        const escaped = abstractedText.replace(
-          /[.*+?^${}()|[\]\\]/g,
-          "\\$&"
-        );
-        const regex = new RegExp(escaped, "g");
-        if (regex.test(text)) {
-          foundAbstracts.push({
-            piiValue: info.original,
-            type: info.type,
-          });
-        }
-      }
-
-      if (foundAbstracts.length > 0) {
-        history.push({
-          action: "abstract",
-          timestamp: Date.now(),
-          conversationId,
-          entityTypes: foundAbstracts.map((e) => e.type),
-          count: foundAbstracts.length,
-          piiTexts: foundAbstracts.map((e) => e.piiValue),
-        });
-        changed = true;
-        console.log(
-          `Dashboard: confirmed ${foundAbstracts.length} abstract action(s) from sent message`
         );
       }
 
