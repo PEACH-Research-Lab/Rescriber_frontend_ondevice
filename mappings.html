@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rescriber — Stored Data</title>
+    <style>
+      :root {
+        --border: #e1e4e8;
+        --muted: #6a737d;
+        --bg-alt: #f6f8fa;
+        --danger: #d73a49;
+        --danger-hover: #b52a38;
+        --primary: #0366d6;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial,
+          sans-serif;
+        margin: 24px auto;
+        max-width: 960px;
+        padding: 0 20px;
+        color: #24292e;
+      }
+      h1 {
+        margin: 0 0 4px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 24px;
+        font-size: 14px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 24px;
+      }
+      .toolbar input[type="search"] {
+        flex: 1;
+        padding: 6px 10px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      button {
+        font-size: 13px;
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--bg-alt);
+      }
+      button.primary {
+        background: var(--primary);
+        color: white;
+        border-color: var(--primary);
+      }
+      button.primary:hover {
+        background: #0256b3;
+      }
+      button.danger {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+      button.danger:hover {
+        background: var(--danger);
+        color: white;
+      }
+      button.icon {
+        padding: 2px 8px;
+        font-size: 12px;
+      }
+      section.card {
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 20px;
+        overflow: hidden;
+      }
+      section.card > header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        background: var(--bg-alt);
+        border-bottom: 1px solid var(--border);
+      }
+      section.card > header h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .count-pill {
+        display: inline-block;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 1px 8px;
+        margin-left: 6px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: normal;
+      }
+      .card-body {
+        padding: 0;
+      }
+      .conversation {
+        border-bottom: 1px solid var(--border);
+      }
+      .conversation:last-child {
+        border-bottom: none;
+      }
+      .conversation > header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 16px;
+        background: white;
+        cursor: pointer;
+        user-select: none;
+      }
+      .conversation > header:hover {
+        background: var(--bg-alt);
+      }
+      .conversation .conv-id {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 13px;
+        color: #24292e;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 640px;
+      }
+      .conversation .conv-meta {
+        font-size: 12px;
+        color: var(--muted);
+        margin-left: 8px;
+      }
+      .conversation table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      .conversation table th,
+      .conversation table td {
+        text-align: left;
+        padding: 8px 16px;
+        border-top: 1px solid var(--border);
+      }
+      .conversation table th {
+        background: var(--bg-alt);
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .conversation table td.pii {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        word-break: break-all;
+      }
+      .conversation table td.actions {
+        text-align: right;
+        width: 1%;
+        white-space: nowrap;
+      }
+      .collapsed table,
+      .collapsed .conv-footer {
+        display: none;
+      }
+      .conv-footer {
+        padding: 8px 16px;
+        background: var(--bg-alt);
+        border-top: 1px solid var(--border);
+        text-align: right;
+      }
+      .empty {
+        padding: 20px 16px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 14px;
+      }
+      details.raw {
+        margin-top: 8px;
+      }
+      details.raw summary {
+        cursor: pointer;
+        font-size: 13px;
+        color: var(--muted);
+        padding: 8px 16px;
+      }
+      details.raw pre {
+        background: var(--bg-alt);
+        margin: 0;
+        padding: 12px 16px;
+        overflow: auto;
+        font-size: 12px;
+        max-height: 400px;
+      }
+      .caret {
+        display: inline-block;
+        transition: transform 0.15s;
+        margin-right: 6px;
+        color: var(--muted);
+      }
+      .collapsed .caret {
+        transform: rotate(-90deg);
+      }
+      .toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: #24292e;
+        color: white;
+        padding: 10px 16px;
+        border-radius: 6px;
+        font-size: 13px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+      }
+      .toast.show {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Stored Data</h1>
+    <p class="subtitle">
+      All data saved by Rescriber in <code>chrome.storage.local</code>. Changes
+      made here take effect immediately.
+    </p>
+
+    <div class="toolbar">
+      <input
+        type="search"
+        id="search"
+        placeholder="Filter by PII text, placeholder, or conversation ID…"
+      />
+      <button id="refreshBtn">Refresh</button>
+      <button id="clearAllBtn" class="danger">Clear everything</button>
+    </div>
+
+    <section class="card" id="piiSection">
+      <header>
+        <h2>
+          PII Mappings
+          <span class="count-pill" id="piiCount">0</span>
+        </h2>
+        <button class="danger" id="clearPiiBtn">Clear all mappings</button>
+      </header>
+      <div class="card-body" id="piiBody"></div>
+    </section>
+
+    <section class="card">
+      <header>
+        <h2>
+          Entity Counts
+          <span class="count-pill" id="entityCountsCount">0</span>
+        </h2>
+        <button class="danger" id="clearEntityCountsBtn">Clear</button>
+      </header>
+      <div class="card-body">
+        <details class="raw">
+          <summary>Show raw JSON</summary>
+          <pre id="entityCountsRaw">{}</pre>
+        </details>
+      </div>
+    </section>
+
+    <section class="card">
+      <header>
+        <h2>
+          Action History
+          <span class="count-pill" id="actionHistoryCount">0</span>
+        </h2>
+        <button class="danger" id="clearActionHistoryBtn">Clear</button>
+      </header>
+      <div class="card-body">
+        <details class="raw">
+          <summary>Show raw JSON</summary>
+          <pre id="actionHistoryRaw">[]</pre>
+        </details>
+      </div>
+    </section>
+
+    <section class="card">
+      <header>
+        <h2>
+          Abstract Mappings
+          <span class="count-pill" id="abstractMappingsCount">0</span>
+        </h2>
+        <button class="danger" id="clearAbstractMappingsBtn">Clear</button>
+      </header>
+      <div class="card-body">
+        <details class="raw">
+          <summary>Show raw JSON</summary>
+          <pre id="abstractMappingsRaw">{}</pre>
+        </details>
+      </div>
+    </section>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="mappings.js"></script>
+  </body>
+</html>

@@ -52,3 +52,7 @@ function updateSections() {
 document.querySelectorAll('input[name="detectionMode"]').forEach((radio) => {
   radio.addEventListener("change", updateSections);
 });
+
+document.getElementById("viewStoredDataButton").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("mappings.html") });
+});

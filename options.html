@@ -24,6 +24,34 @@
       .save-button:hover {
         background-color: #0056b3;
       }
+      .stored-data-section {
+        margin-top: 24px;
+        padding: 14px 16px;
+        border: 1px solid #e1e4e8;
+        border-radius: 6px;
+        background: #f6f8fa;
+      }
+      .stored-data-section h2 {
+        margin: 0 0 6px;
+        font-size: 16px;
+      }
+      .stored-data-section p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        color: #6a737d;
+      }
+      #viewStoredDataButton {
+        padding: 8px 16px;
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      #viewStoredDataButton:hover {
+        background-color: #5a6268;
+      }
     </style>
   </head>
   <body>
@@ -83,6 +111,15 @@
     </div>
 
     <button id="saveButton" class="save-button">Save</button>
+
+    <div class="stored-data-section">
+      <h2>Stored Data</h2>
+      <p>
+        View and manage all PII mappings, entity counts, action history, and
+        abstract mappings stored locally by Rescriber.
+      </p>
+      <button id="viewStoredDataButton">View stored data</button>
+    </div>
 
     <script src="options.js"></script>
   </body>
