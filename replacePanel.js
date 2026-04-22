@@ -3,6 +3,8 @@ export function createPIIReplacementPanel(
   modelNumber,
   hideCheckboxes = false
 ) {
+  const hideAbstract = window.helper?.detectionMode === "privacy_filter";
+
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.type = "text/css";
@@ -69,7 +71,11 @@ export function createPIIReplacementPanel(
     <div class="pii-replacement-footer">
     <div class="replace-abstract"></div>
       <button id="replace-btn" class="replacePanelActionButton" disabled>Replace</button>
-      <button id="abstract-btn" class="replacePanelActionButton" disabled>Abstract<span class="loader-circle" style="display: none;"></span></button>
+      ${
+        hideAbstract
+          ? ""
+          : `<button id="abstract-btn" class="replacePanelActionButton" disabled>Abstract<span class="loader-circle" style="display: none;"></span></button>`
+      }
       <button id="revert-btn" class="replacePanelActionButton" disabled>
         <img src="${chrome.runtime.getURL("images/revert.jpg")}" alt="Revert">
       </button>
@@ -105,16 +111,17 @@ export function createPIIReplacementPanel(
         window.helper.getEntitiesForSelectedText(checkedItems);
       window.helper.replaceWords(entitiesToReplace);
     }
-    document.getElementById("abstract-btn").disabled = true;
+    const abstractBtn = document.getElementById("abstract-btn");
+    if (abstractBtn) abstractBtn.disabled = true;
     document.getElementById("replace-btn").disabled = true;
     document.getElementById("revert-btn").disabled = false;
     disableCheckedCheckboxes();
     window.helper.addReplaceCount();
   });
 
-  document
-    .getElementById("abstract-btn")
-    .addEventListener("click", async () => {
+  const abstractBtn = document.getElementById("abstract-btn");
+  if (abstractBtn) {
+    abstractBtn.addEventListener("click", async () => {
       const checkedItems = Array.from(
         document.querySelectorAll(".pii-checkbox:checked")
       ).map((checkbox) => checkbox.getAttribute("data-entity-text"));
@@ -139,6 +146,7 @@ export function createPIIReplacementPanel(
       }
       window.helper.addAbstractCount();
     });
+  }
 
   document.getElementById("revert-btn").addEventListener("click", () => {
     window.helper.revertToPreviousState();
@@ -201,7 +209,8 @@ export function createPIIReplacementPanel(
       document.querySelectorAll(".pii-checkbox")
     ).some((cb) => cb.checked);
     document.getElementById("replace-btn").disabled = !anyChecked;
-    document.getElementById("abstract-btn").disabled = !anyChecked;
+    const abstractBtn = document.getElementById("abstract-btn");
+    if (abstractBtn) abstractBtn.disabled = !anyChecked;
     updateRevertButtonState();
   }
 

@@ -419,4 +419,13 @@ window.addEventListener("load", async () => {
   initialize();
   checkAllMessagesForReplacement();
   await window.helper.initializeMappings();
+
+  // Kick off privacy-filter model download/load in the background so the
+  // first detection doesn't pay the full cold-start cost.
+  if (window.helper.detectionMode === "privacy_filter") {
+    chrome.runtime.sendMessage({ type: "privacy_filter:warmup" }, () => {
+      // lastError is fine — warmup is best-effort
+      void chrome.runtime.lastError;
+    });
+  }
 });

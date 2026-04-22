@@ -43,7 +43,10 @@
 
     <h2>Detection Mode</h2>
     <label class="input-field">
-      <input type="radio" name="detectionMode" value="ondevice" checked /> On-Device LLM (Ollama)
+      <input type="radio" name="detectionMode" value="privacy_filter" checked /> Privacy Filter (in-browser, WebGPU) — default
+    </label>
+    <label class="input-field">
+      <input type="radio" name="detectionMode" value="ondevice" /> On-Device LLM (Ollama)
     </label>
     <label class="input-field">
       <input type="radio" name="detectionMode" value="cloud" /> Cloud LLM (OpenAI)
@@ -52,7 +55,18 @@
       <input type="radio" name="detectionMode" value="presidio" /> Presidio (no LLM)
     </label>
 
-    <div id="ollamaSection">
+    <div id="privacyFilterSection">
+      <h3>Privacy Filter Settings</h3>
+      <p style="font-size: 0.9em; color: #666;">
+        Runs the <code>openai/privacy-filter</code> model entirely in your browser
+        via Transformers.js. No server or API key needed.<br/>
+        First run downloads the model (~30–50&nbsp;MB, cached afterwards).
+        WebGPU is used when available, with WASM fallback.<br/>
+        Detects: names, emails, phones, addresses, URLs, dates, account numbers, secrets.
+      </p>
+    </div>
+
+    <div id="ollamaSection" style="display:none">
       <h3>Ollama Settings</h3>
       <label class="input-field">
         Model name:

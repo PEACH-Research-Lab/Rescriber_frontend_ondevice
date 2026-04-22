@@ -5,8 +5,8 @@ window.helper = {
   currentUserMessage: "",
   previousUserMessage: "",
   previousEntities: [],
-  useOnDeviceModel: true,
-  detectionMode: "ondevice", // "ondevice", "cloud", or "presidio"
+  useOnDeviceModel: false,
+  detectionMode: "privacy_filter", // "privacy_filter", "ondevice", "cloud", or "presidio"
   showInfoForNew: undefined,
 
   placeholderToPii: {},
@@ -175,8 +175,8 @@ window.helper = {
     });
     if (result.detectionMode) {
       this.detectionMode = result.detectionMode;
-      this.useOnDeviceModel = result.detectionMode === "ondevice";
     }
+    this.useOnDeviceModel = this.detectionMode === "ondevice";
     console.log("Detection mode loaded:", this.detectionMode);
   },
 
@@ -452,7 +452,12 @@ window.helper = {
   getResponseDetect: async function (userMessage) {
     let entities;
     console.log("Detection mode:", this.detectionMode);
-    if (this.detectionMode === "presidio") {
+    if (this.detectionMode === "privacy_filter") {
+      const { getPrivacyFilterResponseDetect } = await import(
+        chrome.runtime.getURL("privacy_filter.js")
+      );
+      entities = await getPrivacyFilterResponseDetect(userMessage);
+    } else if (this.detectionMode === "presidio") {
       const { getPresidioResponseDetect } = await import(
         chrome.runtime.getURL("presidio.js")
       );
@@ -472,8 +477,11 @@ window.helper = {
   },
 
   getResponseCluster: async function (clusterMessage) {
-    // Presidio mode: skip LLM-based clustering (no semantic clustering without LLM)
-    if (this.detectionMode === "presidio") {
+    // Non-LLM detection modes: skip semantic clustering.
+    if (
+      this.detectionMode === "presidio" ||
+      this.detectionMode === "privacy_filter"
+    ) {
       return "{}";
     }
     let clustersResponse;
@@ -574,7 +582,12 @@ window.helper = {
       await this.updatePIIReplacementPanel(this.currentEntities);
     };
 
-    if (this.detectionMode === "presidio") {
+    if (this.detectionMode === "privacy_filter") {
+      const { getPrivacyFilterResponseDetect } = await import(
+        chrome.runtime.getURL("privacy_filter.js")
+      );
+      await getPrivacyFilterResponseDetect(userMessage, onResultCallback);
+    } else if (this.detectionMode === "presidio") {
       const { getPresidioResponseDetect } = await import(
         chrome.runtime.getURL("presidio.js")
       );
@@ -615,7 +628,14 @@ window.helper = {
     const { createPIIReplacementPanel } = await import(
       chrome.runtime.getURL("replacePanel.js")
     );
-    const modelNumber = window.helper.detectionMode === "presidio" ? 3 : window.helper.useOnDeviceModel ? 2 : 1;
+    const modelNumber =
+      window.helper.detectionMode === "privacy_filter"
+        ? 4
+        : window.helper.detectionMode === "presidio"
+        ? 3
+        : window.helper.useOnDeviceModel
+        ? 2
+        : 1;
     if (!this.showInfoForNew) {
       await createPIIReplacementPanel(
         detectedEntities,
@@ -1034,8 +1054,13 @@ window.helper = {
     onResultCallback
   ) {
     let abstractResponse = "";
-    // Presidio mode: no LLM available, use simple placeholder abstraction
-    if (this.detectionMode === "presidio") {
+    // Non-LLM modes: no LLM available, fall back to placeholder abstraction.
+    // privacy_filter mode hides the Abstract button entirely, so this branch
+    // should rarely execute; it stays as a safety net.
+    if (
+      this.detectionMode === "presidio" ||
+      this.detectionMode === "privacy_filter"
+    ) {
       const convId = this.getActiveConversationId() || "no-url";
       const convMappings = this.piiToPlaceholder[convId] || {};
       const results = abstractList.map((pii) => {

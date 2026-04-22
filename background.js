@@ -97,8 +97,74 @@ chrome.runtime.onConnect.addListener((port) => {
 // --- Presidio proxy ---
 const PRESIDIO_BASE = "http://localhost:5002";
 
+// --- Privacy-filter offscreen document ---
+// The offscreen document loads Transformers.js + the openai/privacy-filter
+// model. Service workers can't run WebGPU reliably, so inference lives there.
+const OFFSCREEN_URL = "offscreen.html";
+
+async function ensureOffscreenDocument() {
+  if (await chrome.offscreen.hasDocument()) return;
+  try {
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_URL,
+      reasons: ["WORKERS"],
+      justification:
+        "Run the openai/privacy-filter token-classification model (Transformers.js + WebGPU) for on-device PII detection.",
+    });
+  } catch (err) {
+    // Another concurrent call may have created the document first.
+    if (!(await chrome.offscreen.hasDocument())) throw err;
+  }
+}
+
 // --- Non-streaming via messages (kept for simple calls) ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === "privacy_filter:warmup") {
+    (async () => {
+      try {
+        await ensureOffscreenDocument();
+        console.log("[privacy_filter] ✓ warmup: offscreen document ready");
+        sendResponse({ ok: true });
+      } catch (err) {
+        console.error(`[privacy_filter] ✗ warmup: ${err.message}`);
+        sendResponse({ error: err.message });
+      }
+    })();
+    return true;
+  }
+
+  if (request.type === "privacy_filter") {
+    const t0 = performance.now();
+    const preview = (request.text || "").slice(0, 120);
+    console.log(`[privacy_filter] ➜ "${preview}"`);
+
+    (async () => {
+      try {
+        await ensureOffscreenDocument();
+        const response = await chrome.runtime.sendMessage({
+          type: "privacy_filter:run",
+          text: request.text,
+        });
+        const ms = (performance.now() - t0).toFixed(0);
+        if (response?.error) {
+          console.error(`[privacy_filter] ✗ (${ms}ms): ${response.error}`);
+        } else {
+          console.log(
+            `[privacy_filter] ✓ (${ms}ms): ${
+              response?.results?.length || 0
+            } entities`
+          );
+        }
+        sendResponse(response);
+      } catch (err) {
+        const ms = (performance.now() - t0).toFixed(0);
+        console.error(`[privacy_filter] ✗ (${ms}ms): ${err.message}`);
+        sendResponse({ error: err.message });
+      }
+    })();
+    return true;
+  }
+
   if (request.type === "presidio") {
     const t0 = performance.now();
     const url = `${PRESIDIO_BASE}${request.endpoint}`;

@@ -3,7 +3,7 @@
   "name": "Rescriber",
   "version": "1.0",
   "description": "An extension that revises PII.",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": ["activeTab", "storage", "scripting", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -21,12 +21,23 @@
     "default_icon": "images/16.png"
   },
   "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
   "web_accessible_resources": [
     {
       "resources": [
         "openai.js",
         "ondevice.js",
         "presidio.js",
+        "privacy_filter.js",
+        "offscreen.html",
+        "offscreen.js",
+        "vendor/transformers.min.js",
+        "vendor/ort-wasm-simd-threaded.asyncify.mjs",
+        "vendor/ort-wasm-simd-threaded.asyncify.wasm",
+        "vendor/ort-wasm-simd-threaded.jsep.mjs",
+        "vendor/ort-wasm-simd-threaded.jsep.wasm",
         "replacePanel.js",
         "ui.css",
         "buttonWidget.js",

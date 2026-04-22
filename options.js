@@ -44,6 +44,7 @@ document.querySelectorAll('input[name="apiOption"]').forEach((radio) => {
 // Show/hide sections based on detection mode
 function updateSections() {
   const mode = document.querySelector('input[name="detectionMode"]:checked').value;
+  document.getElementById("privacyFilterSection").style.display = mode === "privacy_filter" ? "" : "none";
   document.getElementById("ollamaSection").style.display = mode === "ondevice" ? "" : "none";
   document.getElementById("presidioSection").style.display = mode === "presidio" ? "" : "none";
 }
