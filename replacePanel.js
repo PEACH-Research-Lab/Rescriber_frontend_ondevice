@@ -1,6 +1,6 @@
 export function createPIIReplacementPanel(
   detectedEntities,
-  modelNumber,
+  modelName,
   hideCheckboxes = false
 ) {
   const hideAbstract = window.helper?.detectionMode === "privacy_filter";
@@ -41,7 +41,7 @@ export function createPIIReplacementPanel(
           <p>Rescriber</p>
         </div>
         <div class="tool-model-number">
-          <p>Model ${modelNumber}</p>
+          <p>${modelName}</p>
         </div>
       </div> 
       <div class="right-corner-buttons">

@@ -180,6 +180,24 @@ window.helper = {
     console.log("Detection mode loaded:", this.detectionMode);
   },
 
+  getDetectionModelName: async function () {
+    switch (this.detectionMode) {
+      case "privacy_filter":
+        return "Privacy Filter";
+      case "presidio":
+        return "Presidio";
+      case "ondevice": {
+        const { ollamaModel } = await new Promise((resolve) =>
+          chrome.storage.sync.get(["ollamaModel"], (r) => resolve(r))
+        );
+        return `Ollama (${ollamaModel || "llama3"})`;
+      }
+      case "cloud":
+      default:
+        return "GPT-4o";
+    }
+  },
+
   getUserInputElement: function () {
     return document.querySelector("[contenteditable]");
   },
@@ -628,22 +646,15 @@ window.helper = {
     const { createPIIReplacementPanel } = await import(
       chrome.runtime.getURL("replacePanel.js")
     );
-    const modelNumber =
-      window.helper.detectionMode === "privacy_filter"
-        ? 4
-        : window.helper.detectionMode === "presidio"
-        ? 3
-        : window.helper.useOnDeviceModel
-        ? 2
-        : 1;
+    const modelName = await this.getDetectionModelName();
     if (!this.showInfoForNew) {
       await createPIIReplacementPanel(
         detectedEntities,
-        modelNumber,
+        modelName,
         (hideCheckboxes = true)
       );
     } else {
-      await createPIIReplacementPanel(detectedEntities, modelNumber);
+      await createPIIReplacementPanel(detectedEntities, modelName);
     }
   },
 
