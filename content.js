@@ -103,11 +103,14 @@ async function checkIfNewUrl(newConversationId) {
 
 function typingHandler(e) {
   const input = window.helper.getUserInputElement();
-  if (input.parentElement.contains(e.target)) {
-    window.helper.setShowInfoForNew(true);
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(doneTyping, doneTypingInterval);
-  }
+  if (!input) return;
+  // Only respond to typing inside the composer itself — not the canvas /
+  // writing-block editor or an in-place message edit, which are also
+  // contenteditable and fire the same events at the document level.
+  if (!input.contains(e.target)) return;
+  window.helper.setShowInfoForNew(true);
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(doneTyping, doneTypingInterval);
 }
 
 async function doneTyping() {

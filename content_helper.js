@@ -198,11 +198,23 @@ window.helper = {
   },
 
   getUserInputElement: function () {
-    // ChatGPT's composer is a contenteditable="true" ProseMirror div, typically
-    // with id="prompt-textarea". Canvas/writing-block responses and in-place
-    // message edits are ALSO contenteditable ProseMirror editors and appear
-    // earlier in the DOM, so a bare [contenteditable] selector can return them
-    // and cause revert/replace to clobber the assistant response.
+    // ChatGPT's composer is a contenteditable="true" ProseMirror div. Canvas/
+    // writing-block responses and in-place message edits are ALSO contenteditable
+    // ProseMirror editors and appear earlier in the DOM, so a bare
+    // [contenteditable] selector can return them and cause detection to run on
+    // the assistant response while ignoring typing in the real composer.
+    //
+    // The composer is always inside the same <form> as the send button, so
+    // anchor on that first.
+    const sendButton = document.querySelector('[data-testid="send-button"]');
+    const composerForm = sendButton
+      ? sendButton.closest("form")
+      : document.querySelector("form");
+    if (composerForm) {
+      const inForm = composerForm.querySelector('[contenteditable="true"]');
+      if (inForm) return inForm;
+    }
+
     const primary = document.querySelector(
       '#prompt-textarea[contenteditable="true"]'
     );
