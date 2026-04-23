@@ -22,6 +22,7 @@ const LABEL_MAP = {
 
 let pipelinePromise = null;
 let pipelineDevice = null;
+let webgpuDisabled = false;
 
 async function getPipeline() {
   if (pipelinePromise) return pipelinePromise;
@@ -48,10 +49,14 @@ async function getPipeline() {
       env.backends.onnx.wasm.numThreads = 1;
     }
 
-    // Prefer WebGPU; fall back to WASM if unavailable on this machine.
-    const hasWebGPU = typeof navigator !== "undefined" && "gpu" in navigator;
+    // Prefer WebGPU; fall back to WASM if unavailable or previously failed.
+    // q4 triggers the GatherBlockQuantized WebGPU kernel which fails with
+    // "Invalid dispatch group size" on some drivers; q4f16 uses a different
+    // gather path and is stable across the GPUs we've tested.
+    const hasWebGPU =
+      !webgpuDisabled && typeof navigator !== "undefined" && "gpu" in navigator;
     const device = hasWebGPU ? "webgpu" : "wasm";
-    const dtype = hasWebGPU ? "q4" : "q8";
+    const dtype = hasWebGPU ? "q4f16" : "q8";
     pipelineDevice = device;
 
     console.log(
@@ -76,6 +81,18 @@ async function getPipeline() {
   }
 }
 
+// Runtime errors from the WebGPU backend (OrtRun / dispatch-size failures,
+// device-lost, etc.) are not recoverable on the same pipeline — rebuild on
+// WASM and mark WebGPU disabled for the rest of this offscreen document.
+function isWebGPURuntimeError(err) {
+  const msg = (err && (err.message || String(err))) || "";
+  return (
+    /OrtRun|dispatch group size|GatherBlockQuantized|WebGPU|device lost/i.test(
+      msg
+    )
+  );
+}
+
 function mapEntities(raw) {
   return raw
     .map((e) => ({
@@ -91,17 +108,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   (async () => {
     const t0 = performance.now();
-    try {
+    const run = async () => {
       const classifier = await getPipeline();
       const raw = await classifier(request.text || "", {
         aggregation_strategy: "simple",
       });
-      const entities = mapEntities(raw);
+      return mapEntities(raw);
+    };
+    try {
+      let entities;
+      let fellBackToWasm = false;
+      try {
+        entities = await run();
+      } catch (err) {
+        if (pipelineDevice === "webgpu" && isWebGPURuntimeError(err)) {
+          console.warn(
+            `[offscreen] WebGPU inference failed (${err.message}); falling back to WASM.`
+          );
+          webgpuDisabled = true;
+          pipelinePromise = null;
+          entities = await run();
+          fellBackToWasm = true;
+        } else {
+          throw err;
+        }
+      }
       const ms = (performance.now() - t0).toFixed(0);
       console.log(
         `[offscreen] ✓ ${entities.length} entities (${ms}ms, ${pipelineDevice})`
       );
-      sendResponse({ results: entities, device: pipelineDevice });
+      sendResponse({
+        results: entities,
+        device: pipelineDevice,
+        fellBackToWasm,
+      });
     } catch (err) {
       const ms = (performance.now() - t0).toFixed(0);
       console.error(`[offscreen] ✗ (${ms}ms):`, err);
