@@ -850,85 +850,6 @@ window.helper = {
     }
 
     this.paintInlinePIIHighlights(entities);
-
-    let highlightedValue = this.getUserInputText();
-
-    // Create a copy of the entities array and sort the copy by the length of their text property in descending order
-    const sortedEntities = [...entities].sort(
-      (a, b) => b.text.length - a.text.length
-    );
-
-    sortedEntities.forEach((entity) => {
-      const regex = new RegExp(
-        `(${entity.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-        "gi"
-      );
-      highlightedValue = highlightedValue.replace(
-        regex,
-        '<span class="highlight">$1</span>'
-      );
-    });
-
-    // Ensure the highlightedValue retains proper HTML structure
-    const escapedHighlightedValue = highlightedValue
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/&lt;span class="highlight"&gt;/g, '<span class="highlight">')
-      .replace(/&lt;\/span&gt;/g, "</span>");
-
-    if (escapedHighlightedValue.length > 0) {
-      this.displayHighlight(
-        this.getUserInputElement(),
-        escapedHighlightedValue
-      );
-    }
-  },
-
-  displayHighlight: function (target, highlightedValue) {
-    const existingTooltips = document.querySelectorAll(
-      ".pii-highlight-tooltip"
-    );
-    existingTooltips.forEach((existingTooltip) => existingTooltip.remove());
-
-    const tooltip = document.createElement("div");
-    tooltip.classList.add("pii-highlight-tooltip");
-    tooltip.innerHTML = highlightedValue;
-
-    document.body.appendChild(tooltip);
-
-    // Calculate the position of the tooltip
-    const rect = target.getBoundingClientRect();
-    tooltip.style.left = `${rect.left + window.scrollX}px`;
-
-    // Set max-width to the width of the input box
-    tooltip.style.maxWidth = `${rect.width}px`;
-
-    // Add the tooltip to measure its height
-    document.body.appendChild(tooltip);
-
-    // Measure the tooltip's height
-    const tooltipHeight = tooltip.offsetHeight;
-
-    // Threshold to determine if the tooltip is more than one line
-    const singleLineHeight = parseFloat(
-      window.getComputedStyle(target).lineHeight
-    );
-
-    // Position the tooltip above or below the input box based on its height
-    if (tooltipHeight > singleLineHeight) {
-      tooltip.style.top = `${rect.top + window.scrollY - tooltipHeight}px`;
-    } else {
-      tooltip.style.top = `${
-        rect.top + window.scrollY + target.offsetHeight
-      }px`;
-    }
-
-    const onInput = () => {
-      tooltip.remove();
-      this.clearInlinePIIHighlights();
-      target.removeEventListener("input", onInput);
-    };
-    target.addEventListener("input", onInput);
   },
 
   getEntitiesForSelectedText: function (selectedTexts) {
@@ -1012,11 +933,6 @@ window.helper = {
     };
 
     performReplacement(inputField, inputField.innerText);
-
-    const existingTooltips = document.querySelectorAll(
-      ".pii-highlight-tooltip"
-    );
-    existingTooltips.forEach((existingTooltip) => existingTooltip.remove());
 
     // Keep highlights for entities the user didn't redact — their text is
     // still present in the composer. innerText was just reassigned so the

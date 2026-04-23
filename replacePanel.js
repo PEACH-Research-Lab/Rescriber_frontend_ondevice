@@ -177,30 +177,18 @@ export function createPIIReplacementPanel(
     subtree: true,
   });
 
-  // Add click event to bring panel to front
+  // Stop click-outside handler below from firing when the user clicks inside
+  // the panel itself.
   panel.addEventListener("click", (event) => {
     event.stopPropagation();
-    panel.style.zIndex = 1001; // Set a high z-index to bring it to front
-    const tooltip = document.querySelector(".pii-highlight-tooltip");
-    if (tooltip) {
-      tooltip.style.zIndex = 1000; // Ensure tooltip has a lower z-index
-    }
   });
 
-  // Ensure tooltip has a lower z-index initially
+  // Click outside the panel → dismiss it (and clear inline highlights).
   document.addEventListener("click", (event) => {
-    const tooltip = document.querySelector(".pii-highlight-tooltip");
     const panel = document.getElementById("pii-replacement-panel");
-    if (tooltip && panel) {
-      if (panel.contains(event.target)) {
-        tooltip.style.zIndex = 999; // Set a lower z-index
-      } else if (tooltip.contains(event.target)) {
-        tooltip.style.zIndex = 1001; // Bring tooltip to front
-        panel.style.zIndex = 1000; // Ensure panel has a lower z-index
-      } else {
-        tooltip.remove();
-        panel.remove();
-      }
+    if (panel && !panel.contains(event.target)) {
+      panel.remove();
+      window.helper.clearInlinePIIHighlights();
     }
   });
 

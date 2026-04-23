@@ -44,7 +44,7 @@ async function checkForConversationChange() {
     ) {
       previousEnabled = window.helper.enabled;
       currentConversationId = newConversationId;
-      removeTooltipAndPanel();
+      removePanel();
       document.removeEventListener("input", typingHandler);
       document.removeEventListener("paste", typingHandler);
       document.addEventListener("input", typingHandler);
@@ -71,7 +71,7 @@ async function handleConversationChange(newConversationId) {
   }
   previousEnabled = window.helper.enabled;
   currentConversationId = newConversationId;
-  removeTooltipAndPanel();
+  removePanel();
   document.removeEventListener("input", typingHandler);
   document.removeEventListener("paste", typingHandler);
   document.addEventListener("input", typingHandler);
@@ -108,6 +108,9 @@ function typingHandler(e) {
   // writing-block editor or an in-place message edit, which are also
   // contenteditable and fire the same events at the document level.
   if (!input.contains(e.target)) return;
+  // Any edit can shift text offsets, making stored highlight Ranges point at
+  // the wrong characters. Clear now; detection will repaint after debounce.
+  window.helper.clearInlinePIIHighlights();
   window.helper.setShowInfoForNew(true);
   clearTimeout(typingTimer);
   typingTimer = setTimeout(doneTyping, doneTypingInterval);
@@ -168,12 +171,7 @@ function updateDetectButtonWithResults(noFound) {
   }
 }
 
-function removeTooltipAndPanel() {
-  const tooltip = document.querySelector(".pii-highlight-tooltip");
-  if (tooltip) {
-    tooltip.remove();
-  }
-
+function removePanel() {
   const panel = document.getElementById("pii-replacement-panel");
   if (panel) {
     panel.remove();
@@ -360,8 +358,8 @@ function observeStopButton() {
     if (stopButton) {
       wasStreaming = true;
       // Once user send out the message, then stop button would show up, and send button will be replaced
-      // then we remove tooltip and panel
-      removeTooltipAndPanel();
+      // then we remove the panel and clear any inline highlights
+      removePanel();
     } else if (wasStreaming) {
       // Stop button disappeared — streaming just finished.
       // Now it's safe to run replacement on assistant messages that

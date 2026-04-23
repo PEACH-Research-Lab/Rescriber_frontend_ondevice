@@ -12,10 +12,6 @@
   color: black;
 }
 
-.pii-highlight-tooltip {
-  z-index: 1000; /* Ensure it has a lower z-index */
-}
-
 .pii-replacement-header {
   display: flex;
   justify-content: space-between;
