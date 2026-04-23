@@ -3,8 +3,7 @@ window.helper = {
   detectedEntities: [],
   currentEntities: [],
   currentUserMessage: "",
-  previousUserMessage: "",
-  previousEntities: [],
+  previousStatesByConversation: {},
   useOnDeviceModel: false,
   detectionMode: "privacy_filter", // "privacy_filter", "ondevice", "cloud", or "presidio"
   showInfoForNew: undefined,
@@ -199,7 +198,24 @@ window.helper = {
   },
 
   getUserInputElement: function () {
-    return document.querySelector("[contenteditable]");
+    // ChatGPT's composer is a contenteditable="true" ProseMirror div, typically
+    // with id="prompt-textarea". Canvas/writing-block responses and in-place
+    // message edits are ALSO contenteditable ProseMirror editors and appear
+    // earlier in the DOM, so a bare [contenteditable] selector can return them
+    // and cause revert/replace to clobber the assistant response.
+    const primary = document.querySelector(
+      '#prompt-textarea[contenteditable="true"]'
+    );
+    if (primary) return primary;
+
+    const candidates = document.querySelectorAll('[contenteditable="true"]');
+    for (const el of candidates) {
+      if (el.closest('[data-message-author-role]')) continue;
+      if (el.closest('[data-writing-block="true"]')) continue;
+      if (el.closest(".writing-block-editor")) continue;
+      return el;
+    }
+    return null;
   },
 
   getUserInputText: function () {
@@ -683,17 +699,26 @@ window.helper = {
     this.showReplacementPanel(this.currentEntities);
   },
 
+  getPreviousStateForActiveConversation: function () {
+    const id = this.getActiveConversationId() || "no-url";
+    return this.previousStatesByConversation[id] || null;
+  },
+
   saveCurrentState: function () {
-    this.previousUserMessage = this.currentUserMessage;
-    this.previousEntities = [...this.currentEntities];
+    const id = this.getActiveConversationId() || "no-url";
+    this.previousStatesByConversation[id] = {
+      userMessage: this.currentUserMessage,
+      entities: [...this.currentEntities],
+    };
   },
 
   revertToPreviousState: async function () {
     const input = this.getUserInputElement();
-    if (input) {
-      input.innerText = this.previousUserMessage;
-      this.currentUserMessage = this.previousUserMessage;
-      this.currentEntities = [...this.previousEntities];
+    const prev = this.getPreviousStateForActiveConversation();
+    if (input && prev) {
+      input.innerText = prev.userMessage;
+      this.currentUserMessage = prev.userMessage;
+      this.currentEntities = [...prev.entities];
       await this.updatePIIReplacementPanel(this.currentEntities);
     }
   },

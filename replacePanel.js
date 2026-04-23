@@ -226,7 +226,10 @@ export function createPIIReplacementPanel(
 
   function checkMessageStateChanged() {
     const input = window.helper.getUserInputElement();
-    return input.innerText !== window.helper.previousUserMessage;
+    if (!input) return false;
+    const prev = window.helper.getPreviousStateForActiveConversation();
+    if (!prev) return false;
+    return input.innerText !== prev.userMessage;
   }
 
   function showAbstractLoading() {
