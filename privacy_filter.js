@@ -22,6 +22,16 @@ async function callPrivacyFilter(text) {
   });
 }
 
+// Split on sentence boundaries (., !, ?, or newline) followed by whitespace.
+// Falls back to the full text as a single segment when no boundary matches.
+function splitIntoSentences(text) {
+  const parts = text
+    .split(/(?<=[.!?\n])\s+/g)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return parts.length > 0 ? parts : [text];
+}
+
 export async function getPrivacyFilterResponseDetect(
   userMessage,
   onResultCallback
@@ -29,19 +39,38 @@ export async function getPrivacyFilterResponseDetect(
   console.log("[privacy_filter:detect] Input:", userMessage.slice(0, 200));
   const t0 = performance.now();
 
-  const response = await callPrivacyFilter(userMessage);
-  const entities = response.results || [];
+  const sentences = splitIntoSentences(userMessage);
+  console.log(
+    `[privacy_filter:detect] Split into ${sentences.length} sentence(s)`
+  );
+
+  const allEntities = [];
+  let device = null;
+
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
+    const response = await callPrivacyFilter(sentence);
+    device = response.device || device;
+    const entities = response.results || [];
+    console.log(
+      `[privacy_filter:detect] Sentence ${i + 1}/${sentences.length} (${
+        sentence.length
+      } chars): ${entities.length} entities`
+    );
+    if (entities.length > 0) {
+      allEntities.push(...entities);
+      if (onResultCallback) {
+        await onResultCallback([...allEntities]);
+      }
+    }
+  }
 
   const ms = (performance.now() - t0).toFixed(0);
   console.log(
-    `[privacy_filter:detect] Done (${ms}ms, device=${
-      response.device || "?"
-    }): ${entities.length} entities`
+    `[privacy_filter:detect] Done (${ms}ms, device=${device || "?"}): ${
+      allEntities.length
+    } entities across ${sentences.length} sentence(s)`
   );
 
-  if (onResultCallback && entities.length > 0) {
-    await onResultCallback(entities);
-  }
-
-  return entities;
+  return allEntities;
 }
