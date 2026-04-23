@@ -1,150 +1,92 @@
-# Installation Guide
+# Rescriber
 
-Please refer to the installation sample video for guidance: [https://drive.google.com/file/d/1Jwx-GTh2EWEWsK7heWo2LndlECKfATM-/view?usp=sharing](https://drive.google.com/file/d/1Jwx-GTh2EWEWsK7heWo2LndlECKfATM-/view?usp=sharing)
+Chrome extension that detects PII in your ChatGPT prompts and lets you
+replace it with placeholders (or abstract it) before sending.
 
-## **Prerequisites**
-
-1. **Install Python 3:**
-
-   - Download Python 3 from [https://www.python.org/downloads/](https://www.python.org/downloads/).
-   - Ensure you can run Python scripts using the command line:
-     ```bash
-     python3 --version
-     ```
-   - Ensure `pip3` is available for installing dependencies:  
-     [https://pypi.org/project/pip/](https://pypi.org/project/pip/).
-
-2. **Install Ollama:**
-
-   - Download and install Ollama from [https://ollama.com/download/Ollama-darwin.zip](https://ollama.com/download/Ollama-darwin.zip).
-   - Once you see that Ollama is running, please open a Terminal window, and type the following command:
-     ```bash
-     ollama pull llama3
-     ```
-
-3. **Install Google Chrome:**
-   - Ensure Chrome is installed and and it will later be closed before using the tool.
+The default **Privacy Filter** mode runs the
+[`openai/privacy-filter`](https://huggingface.co/openai/privacy-filter)
+model entirely in your browser via Transformers.js — no server, no API key,
+no data leaves the machine. Other backends (Ollama, OpenAI, Presidio) are
+available in the options page but are not required.
 
 ---
 
-## **Steps**
+## Quick start (Privacy Filter, default)
 
-1. **Download and Set Up Frontend:**
+### Prerequisites
 
-   - Download the ZIP file from [https://github.com/jigglypuff96/Rescriber_frontend/archive/refs/heads/ondevice.zip](https://github.com/jigglypuff96/Rescriber_frontend/archive/refs/heads/ondevice.zip).
-   - Unzip it inside your Mac's `Downloads` folder.
+- Google Chrome with WebGPU support (Chrome 113+). WASM fallback runs if
+  WebGPU is disabled, just slower.
 
-2. **Download and Set Up Backend:**
+### Install
 
-   - Download the ZIP file from [https://github.com/jigglypuff96/Rescriber_backend/archive/refs/heads/main.zip](https://github.com/jigglypuff96/Rescriber_backend/archive/refs/heads/main.zip).
-   - Unzip it inside your Mac's `Downloads` folder.
+1. Clone or download this repo.
 
-3. **Start the Backend Server:**
+2. Fetch the Transformers.js + ONNX Runtime Web assets into `vendor/`
+   (first time only):
 
-   - Open **Terminal** and type the following commands line by line:
-     1. Go to the folder that contains Rescriber backend files
-     ```bash
-     cd ~/Downloads/Rescriber_backend-main
-     ```
-     2. Pip install all the necessary dependencies:
-     ```bash
-     python3 -m pip install -r requirements.txt
-     ```
-     3. Start running the python server
-     ```bash
-     python3 prod.py
-     ```
-   - Wait for the message `"Initialization complete. Now you can start using the tool!"` to appear in the terminal. It might take around 1 minute. If you see any errors, contact the research team.
+   ```bash
+   cd vendor
+   curl -L -O https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js
+   ORT=https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist
+   curl -L -O $ORT/ort-wasm-simd-threaded.asyncify.mjs
+   curl -L -O $ORT/ort-wasm-simd-threaded.asyncify.wasm
+   curl -L -O $ORT/ort-wasm-simd-threaded.jsep.mjs
+   curl -L -O $ORT/ort-wasm-simd-threaded.jsep.wasm
+   ```
 
-4. **Close and Launch Chrome with SSL Error Ignored:**
+   Transformers.js 4.2.0+ is required — earlier versions don't know the
+   `openai_privacy_filter` model class.
 
-   - Open a new **Terminal** and type the following command line by line. Please feel free to copy the current link [https://github.com/jigglypuff96/Rescriber_frontend/tree/ondevice](https://github.com/jigglypuff96/Rescriber_frontend/tree/ondevice), as well as the two commands, into any text editor or open the link in Safari. This way, you'll still have access to them if Chrome is closed. The second command will automatically reopen Chrome: 
-     ```bash
-     killall Google\ Chrome
-     open -a "Google Chrome" --args --ignore-certificate-errors
-     ```
+3. Load the extension:
+   - Open `chrome://extensions/`
+   - Enable **Developer mode** (top-right toggle)
+   - Click **Load unpacked** and select the repo folder
+   - Confirm **Rescriber** appears in the list
 
-5. **Install the Chrome Extension:**
+See [InstallChromeExtension.md](InstallChromeExtension.md) for a walk-through
+with screenshots.
 
-   - Once Chrome is opened, you will see a notification indicating that you are using the --ignore-certificate-errors flag. This is normal and nothing to worry about; it is required because the extension is currently under development, and this flag allows us to bypass certain production-level security checks during testing.
-   - Leave the current tab unchanged, and open a new tab, go to [chrome://extensions](chrome://extensions)
-   - Follow the instructions at [https://github.com/jigglypuff96/Rescriber_frontend/blob/ondevice/InstallChromeExtension.md](https://github.com/jigglypuff96/Rescriber_frontend/blob/ondevice/InstallChromeExtension.md) to install the extension.
-   - Verify that the extension **"Rescriber"** appears in the list of installed extensions.
+### Use
 
-6. **Start Chatting:**
-   - Navigate to [https://chat.openai.com/](https://chat.openai.com/).
-   - Check the bottom-right corner of the page for a green circle.
-     - If you don’t see it, refresh the page.
-     - If it still doesn’t appear, contact the research team.
-   - Use this link to copy and paste content into the chat:  
-     [https://docs.google.com/document/d/1_rLaj6Ap0zFebnS-yZTCbe9Sz1-O4-aBKdyJdbjVvu0/edit?usp=sharing](https://docs.google.com/document/d/1_rLaj6Ap0zFebnS-yZTCbe9Sz1-O4-aBKdyJdbjVvu0/edit?usp=sharing).
+1. Go to [chatgpt.com](https://chatgpt.com/).
+2. A small detect button appears next to the composer. Start typing — after
+   a short pause the extension scans the message.
+3. The first scan downloads the `openai/privacy-filter` model (~30–50 MB,
+   cached afterwards).
+4. When PII is detected, a panel lists the findings. For each item you can:
+   - **Replace** — swap the value for a placeholder like `[NAME1]`
+   - **Abstract** — rewrite the surrounding sentence to remove the detail
+     (requires OpenAI mode; not used by the default Privacy Filter flow)
+   - **Revert** — undo the last replace/abstract on the current message
 
----
-
-# Post-study data sharing
-
-Please open ~/Downloads/Rescriber_backend-main folder, and share with us the timing log "timing.txt" with the researcher.
-A sample timing log contains contents like this: 
-2024-11-26 00:02:59 - Result chunk: {'results': []} (Time: 61.62s)
-2024-11-26 00:03:17 - Detect request received!
-2024-11-26 00:03:22 - Result chunk: {'results': [{'entity_type': 'NAME', 'text': 'Lisa'}]} (Time: 4.66s)
+Placeholders are mapped locally per-conversation, so when the assistant
+replies with a placeholder you see the original value restored in-place.
 
 ---
 
-# Uninstallation Guide
+## Other detection modes
 
-Please refer to the uninstallation sample videos for guidance:
-1. [https://drive.google.com/file/d/1FDaqUF6ypkoK3wF0TIQ8q-V_rkGpi0SC/view?usp=sharing](https://drive.google.com/file/d/1FDaqUF6ypkoK3wF0TIQ8q-V_rkGpi0SC/view?usp=sharing) 
-2. [https://drive.google.com/file/d/1NZwrO-kMh2j4HEN9AhQaPu-i9jKyUMOg/view?usp=sharing](https://drive.google.com/file/d/1NZwrO-kMh2j4HEN9AhQaPu-i9jKyUMOg/view?usp=sharing)
+Open the extension's options page (right-click the toolbar icon →
+**Options**) to switch modes:
 
+- **Privacy Filter** (default) — in-browser, no setup beyond the vendor
+  download above.
+- **On-Device LLM (Ollama)** — runs a local Llama model via Ollama.
+  Requires `ollama pull llama3` and the Rescriber backend server.
+- **Cloud LLM (OpenAI)** — uses the OpenAI API. Paste a key in the
+  options page.
+- **Presidio** — requires `python presidio_server.py` on port 5002.
 
-## **Stop the Backend Server**
-
-1. Open the **same terminal** where you ran `python prod.py`.
-2. Press `Control + C` to stop the server.
-
----
-
-## **Remove Backend and Frontend Files**
-
-1. **Locate the files:**
-
-   - The backend files are in the `~/Downloads/Rescriber_backend-main` folder.
-   - The frontend files are in the `~/Downloads/Rescriber_frontend-ondevice` folder.
-
-2. **Delete the folders:**
-   - Drag both folders to the Trash.
+The Ollama and Presidio modes need the
+[Rescriber_backend](https://github.com/jigglypuff96/Rescriber_backend) repo
+running; consult that repo's README for setup.
 
 ---
 
-## **Uninstall the Chrome Extension**
+## Uninstall
 
-1. Go to [chrome://extensions](chrome://extensions).
-2. Locate the extension named **"Rescriber"**.
-3. Click **Remove** to uninstall it.
-
----
-
-## **Optional Uninstall Steps**
-
-If you installed Python, Ollama, or Google Chrome specifically for this task, you can uninstall them as follows:
-
-1. **Uninstall Python:**
-
-   - **If installed using `brew`:**
-     ```bash
-     brew uninstall python
-     ```
-   - **If installed manually:**
-     - Open Finder and go to `/Library/Frameworks/Python.framework/Versions/`.
-     - Delete the folder corresponding to the Python version you installed.
-     - Remove the `python3` or `python` binary from `/usr/local/bin/`.
-
-2. **Uninstall Ollama:**
-
-   - Find the Ollama app in your Applications and Downloads folder.
-   - Drag it to the Trash.
-
-3. **Uninstall Google Chrome:**
-   - Find the Chrome app in your Applications folder.
-   - Drag it to the Trash.
+1. `chrome://extensions` → locate **Rescriber** → **Remove**.
+2. Delete the repo folder.
+3. If you were running the backend server, stop it (`Ctrl+C` in its terminal)
+   and delete its folder.
