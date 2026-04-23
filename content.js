@@ -177,7 +177,11 @@ function removeTooltipAndPanel() {
   }
 }
 
-setInterval(async () => {
+const conversationChangeInterval = setInterval(async () => {
+  if (!window.helper.isExtensionContextValid()) {
+    clearInterval(conversationChangeInterval);
+    return;
+  }
   try {
     await checkForConversationChange();
   } catch (error) {

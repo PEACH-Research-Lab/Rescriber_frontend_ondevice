@@ -299,15 +299,31 @@ window.helper = {
     return { exists: false, key: null }; // Returns false and null if the value is not found
   },
 
+  isExtensionContextValid: function () {
+    try {
+      return !!(chrome.runtime && chrome.runtime.id);
+    } catch (e) {
+      return false;
+    }
+  },
+
   setToStorage: function (data) {
     return new Promise((resolve, reject) => {
-      chrome.storage.local.set(data, () => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-        } else {
-          resolve();
-        }
-      });
+      if (!this.isExtensionContextValid()) {
+        resolve();
+        return;
+      }
+      try {
+        chrome.storage.local.set(data, () => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve();
+          }
+        });
+      } catch (e) {
+        resolve();
+      }
     });
   },
 
@@ -354,7 +370,7 @@ window.helper = {
   async getCurrentEntitiesFromCloud() {
     const data = await this.getFromStorage(null);
     const activeConversationId = this.getActiveConversationId() || "no-url";
-    const pii2placeholderMapping = data.piiToPlaceholder[activeConversationId];
+    const pii2placeholderMapping = data.piiToPlaceholder?.[activeConversationId];
     if (pii2placeholderMapping) {
       return this.createCurrentEntities(pii2placeholderMapping);
     } else {
@@ -1179,13 +1195,21 @@ window.helper = {
 
   getFromStorage: function (keys) {
     return new Promise((resolve, reject) => {
-      chrome.storage.local.get(keys, (result) => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-        } else {
-          resolve(result);
-        }
-      });
+      if (!this.isExtensionContextValid()) {
+        resolve({});
+        return;
+      }
+      try {
+        chrome.storage.local.get(keys, (result) => {
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(result);
+          }
+        });
+      } catch (e) {
+        resolve({});
+      }
     });
   },
 
