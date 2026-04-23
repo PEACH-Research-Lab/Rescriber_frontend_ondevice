@@ -235,6 +235,40 @@ window.helper = {
     return input ? input.innerText : "";
   },
 
+  // Round-tripping the composer through `innerText` does not preserve blank
+  // lines: Chrome's innerText getter emits multiple \n per paragraph boundary,
+  // and the setter emits <br>s that ProseMirror re-normalizes inconsistently.
+  // Work on the paragraph structure directly — one <p> per line is the
+  // canonical ProseMirror shape for the ChatGPT composer.
+  getComposerParagraphs: function (element) {
+    if (!element) return [];
+    const paragraphs = [];
+    for (const child of element.children) {
+      if (child.tagName === "P") paragraphs.push(child.textContent || "");
+    }
+    if (paragraphs.length === 0) paragraphs.push(element.textContent || "");
+    return paragraphs;
+  },
+
+  setComposerParagraphs: function (element, paragraphs) {
+    if (!element) return;
+    const frag = document.createDocumentFragment();
+    const lines = paragraphs.length ? paragraphs : [""];
+    for (const line of lines) {
+      const p = document.createElement("p");
+      if (line === "") {
+        const br = document.createElement("br");
+        br.className = "ProseMirror-trailingBreak";
+        p.appendChild(br);
+      } else {
+        p.appendChild(document.createTextNode(line));
+      }
+      frag.appendChild(p);
+    }
+    element.replaceChildren(frag);
+    element.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  },
+
   generateUserMessageCluster: function (userMessage, entities) {
     let clusterMessage = `<message>${userMessage}</message>`;
     if (entities.length) {
@@ -718,8 +752,10 @@ window.helper = {
 
   saveCurrentState: function () {
     const id = this.getActiveConversationId() || "no-url";
+    const input = this.getUserInputElement();
     this.previousStatesByConversation[id] = {
       userMessage: this.currentUserMessage,
+      paragraphs: input ? this.getComposerParagraphs(input) : [],
       entities: [...this.currentEntities],
     };
   },
@@ -729,7 +765,7 @@ window.helper = {
     const prev = this.getPreviousStateForActiveConversation();
     if (input && prev) {
       this.clearInlinePIIHighlights();
-      input.innerText = prev.userMessage;
+      this.setComposerParagraphs(input, prev.paragraphs || []);
       this.currentUserMessage = prev.userMessage;
       this.currentEntities = [...prev.entities];
       await this.updatePIIReplacementPanel(this.currentEntities);
@@ -915,7 +951,7 @@ window.helper = {
 
     entities.sort((a, b) => b.text.length - a.text.length);
 
-    const performReplacement = (element, value) => {
+    const replaceInLine = (value) => {
       value = this.markNonSelectedRegions(value, entities);
 
       entities.forEach((entity) => {
@@ -927,12 +963,11 @@ window.helper = {
         );
         value = value.replace(regex, `[${placeholder}]`);
       });
-      value = this.unmarkRegions(value);
-
-      element.innerText = value;
+      return this.unmarkRegions(value);
     };
 
-    performReplacement(inputField, inputField.innerText);
+    const paragraphs = this.getComposerParagraphs(inputField);
+    this.setComposerParagraphs(inputField, paragraphs.map(replaceInLine));
 
     // Keep highlights for entities the user didn't redact — their text is
     // still present in the composer. innerText was just reassigned so the
@@ -1055,12 +1090,17 @@ window.helper = {
     const onResultCallback = (partialAbstractResponse) => {
       const input = this.getUserInputElement();
       if (input) {
-        // Update the input field with the partial response
-        input.innerText = this.applyAbstractResponse(
-          partialAbstractResponse,
-          input.innerText,
-          abstractList
+        // Update the input field with the partial response, per paragraph
+        // so blank lines are preserved.
+        const paragraphs = this.getComposerParagraphs(input);
+        const updatedParagraphs = paragraphs.map((line) =>
+          this.applyAbstractResponse(
+            partialAbstractResponse,
+            line,
+            abstractList
+          )
         );
+        this.setComposerParagraphs(input, updatedParagraphs);
         this.currentUserMessage = input.innerText;
       }
       // Keep the latest complete set of pairs for storage
