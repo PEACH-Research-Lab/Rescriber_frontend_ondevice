@@ -217,7 +217,7 @@ export function createPIIReplacementPanel(
     if (!input) return false;
     const prev = window.helper.getPreviousStateForActiveConversation();
     if (!prev) return false;
-    return input.innerText !== prev.userMessage;
+    return window.helper.getUserInputText() !== prev.userMessage;
   }
 
   function showAbstractLoading() {

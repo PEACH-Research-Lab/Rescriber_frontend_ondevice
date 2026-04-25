@@ -60,13 +60,31 @@ function showWebGPUFallbackToast() {
 }
 
 // Split on sentence boundaries (., !, ?, or newline) followed by whitespace.
-// Falls back to the full text as a single segment when no boundary matches.
+// Returns each non-empty segment with its starting offset in the original
+// text, so caller can translate sentence-local entity offsets back to
+// message-global ones. Falls back to the full text as a single segment when
+// no boundary matches.
 function splitIntoSentences(text) {
-  const parts = text
-    .split(/(?<=[.!?\n])\s+/g)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  return parts.length > 0 ? parts : [text];
+  const segments = [];
+  const splitRegex = /(?<=[.!?\n])\s+/g;
+  let lastEnd = 0;
+  let m;
+  while ((m = splitRegex.exec(text)) !== null) {
+    const seg = text.slice(lastEnd, m.index);
+    const trimmed = seg.trim();
+    if (trimmed.length > 0) {
+      const offset = lastEnd + (seg.length - seg.trimStart().length);
+      segments.push({ text: trimmed, offset });
+    }
+    lastEnd = m.index + m[0].length;
+  }
+  const tail = text.slice(lastEnd);
+  const trimmedTail = tail.trim();
+  if (trimmedTail.length > 0) {
+    const offset = lastEnd + (tail.length - tail.trimStart().length);
+    segments.push({ text: trimmedTail, offset });
+  }
+  return segments.length > 0 ? segments : [{ text, offset: 0 }];
 }
 
 const VALID_SEGMENTATIONS = new Set(["sentence", "whole"]);
@@ -119,11 +137,17 @@ export async function getPrivacyFilterResponseDetect(
   let device = null;
 
   for (let i = 0; i < sentences.length; i++) {
-    const sentence = sentences[i];
+    const { text: sentence, offset: segOffset } = sentences[i];
     const response = await callPrivacyFilter(sentence);
     device = response.device || device;
     if (response.fellBackToWasm) showWebGPUFallbackToast();
     const entities = response.results || [];
+    // Entity offsets come back relative to the sentence we sent; shift them
+    // so they're relative to the full userMessage.
+    for (const e of entities) {
+      if (typeof e.start === "number") e.start += segOffset;
+      if (typeof e.end === "number") e.end += segOffset;
+    }
     console.log(
       `[privacy_filter:detect] Sentence ${i + 1}/${sentences.length} (${
         sentence.length

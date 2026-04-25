@@ -230,9 +230,14 @@ window.helper = {
     return null;
   },
 
+  // Joined-paragraphs form of the composer: same canonical view used by
+  // setComposerParagraphs, so character offsets returned by detection are
+  // valid indices into this string and stay valid after we splice
+  // placeholders back in (no innerText double-\n surprises).
   getUserInputText: function () {
     const input = this.getUserInputElement();
-    return input ? input.innerText : "";
+    if (!input) return "";
+    return this.getComposerParagraphs(input).join("\n");
   },
 
   // Round-tripping the composer through `innerText` does not preserve blank
@@ -630,27 +635,38 @@ window.helper = {
       "gi"
     );
 
-    // Use a Set to keep track of unique entities
-    const seen = new Set();
-    const filteredEntities = entities.filter((entity) => {
+    // Dedupe by (type, text) so the replacement panel shows one row per
+    // unique entity, but aggregate every occurrence's offset into a `spans`
+    // array on the kept entity. The model emits one result per BIOES span,
+    // so multiple appearances of the same string arrive as separate entries
+    // — without this, offset-based redaction would only catch the first.
+    const seen = new Map();
+    const filteredEntities = [];
+    for (const entity of entities) {
       const identifier = `${entity.entity_type}:${entity.text}`;
+      const span =
+        typeof entity.start === "number" && typeof entity.end === "number"
+          ? { start: entity.start, end: entity.end }
+          : null;
+
       if (seen.has(identifier)) {
-        return false; // Skip duplicate entities
+        if (span) seen.get(identifier).spans.push(span);
+        continue;
       }
-      seen.add(identifier);
 
       const match = placeholderPattern.test(entity.text);
-
-      // Additional check for placeholders
       const additionalCheck = entityPlaceholders.some((placeholder) =>
         new RegExp(
           `\\b${placeholder}\\d+\\b|\\[${placeholder}\\d+\\]`,
           "gi"
         ).test(entity.text)
       );
+      if (match || additionalCheck) continue;
 
-      return !(match || additionalCheck);
-    });
+      const out = { ...entity, spans: span ? [span] : [] };
+      seen.set(identifier, out);
+      filteredEntities.push(out);
+    }
 
     return filteredEntities;
   },
@@ -958,91 +974,124 @@ window.helper = {
 
     console.log("Updated mappings:", localMappings);
 
-    entities.sort((a, b) => b.text.length - a.text.length);
+    const placeholderFor = (entity) =>
+      localMappings.piiToPlaceholder[entity.text] || entity.entity_type;
 
-    const replaceInLine = (value) => {
-      value = this.markNonSelectedRegions(value, entities);
+    // Splice every selected span out of the snapshot detection ran against.
+    // currentUserMessage is the same canonical (paragraph-joined) string the
+    // model saw, so entity.spans[].{start,end} are valid indices into it. A
+    // detection re-runs whenever the user edits the composer, so the
+    // snapshot is always current here. Anything that fails the verbatim
+    // check below (e.g. the LLM detector path that has no offsets) falls
+    // through to a word-boundary regex fallback.
+    const sourceText = this.currentUserMessage || "";
 
-      entities.forEach((entity) => {
-        const placeholder =
-          localMappings.piiToPlaceholder[entity.text] || entity.entity_type;
+    const allSpans = [];
+    const fallbackEntities = [];
+    for (const entity of entities) {
+      const placeholder = `[${placeholderFor(entity)}]`;
+      const valid = (entity.spans || []).filter(
+        (s) =>
+          typeof s.start === "number" &&
+          typeof s.end === "number" &&
+          s.start >= 0 &&
+          s.end <= sourceText.length &&
+          sourceText.slice(s.start, s.end).toLowerCase() ===
+            entity.text.toLowerCase()
+      );
+      if (valid.length === 0) {
+        fallbackEntities.push(entity);
+        continue;
+      }
+      for (const s of valid) {
+        allSpans.push({
+          start: s.start,
+          end: s.end,
+          placeholder,
+        });
+      }
+    }
+
+    // Drop overlaps: sort by start, prefer the longer span when two start at
+    // the same position, then skip any later span whose start lands inside a
+    // span already kept.
+    allSpans.sort((a, b) => a.start - b.start || b.end - a.end);
+    const claimed = [];
+    for (const s of allSpans) {
+      if (claimed.length === 0 || s.start >= claimed[claimed.length - 1].end) {
+        claimed.push(s);
+      }
+    }
+
+    // Splice right-to-left so earlier offsets stay valid as we go.
+    let newText = sourceText;
+    for (let i = claimed.length - 1; i >= 0; i--) {
+      const s = claimed[i];
+      newText = newText.slice(0, s.start) + s.placeholder + newText.slice(s.end);
+    }
+
+    // Fallback for entities without usable offsets (e.g. LLM detector).
+    if (fallbackEntities.length > 0) {
+      const sorted = [...fallbackEntities].sort(
+        (a, b) => b.text.length - a.text.length
+      );
+      for (const entity of sorted) {
+        const placeholder = placeholderFor(entity);
         const regex = new RegExp(
           `(?<!\\w)${this.replacementEscapeRegExp(entity.text)}(?!\\w)`,
           "gi"
         );
-        value = value.replace(regex, `[${placeholder}]`);
-      });
-      return this.unmarkRegions(value);
-    };
+        newText = newText.replace(regex, `[${placeholder}]`);
+      }
+    }
 
-    const paragraphs = this.getComposerParagraphs(inputField);
-    this.setComposerParagraphs(inputField, paragraphs.map(replaceInLine));
+    this.currentUserMessage = newText;
+    this.setComposerParagraphs(inputField, newText.split("\n"));
 
-    // Keep highlights for entities the user didn't redact — their text is
-    // still present in the composer. innerText was just reassigned so the
-    // previous Ranges are stale; defer one frame so ProseMirror's mutation
-    // observer finishes normalizing before we attach new Ranges.
+    // Shift remaining entities' spans by the cumulative length delta of every
+    // earlier redaction, and drop any span that overlapped a redacted region
+    // (its text no longer exists verbatim). This keeps spans accurate for
+    // future redactions / highlight repaints without needing re-detection.
     const replacedTexts = new Set(entities.map((e) => e.text));
     const remaining = (this.currentEntities || []).filter(
       (e) => !replacedTexts.has(e.text)
     );
-    this.clearInlinePIIHighlights();
-    requestAnimationFrame(() => this.paintInlinePIIHighlights(remaining));
-  },
-
-  markNonSelectedRegions: function (value, selectedEntities) {
-    const parts = [];
-    let lastIndex = 0;
-    const alreadyMarked = [];
-
-    this.currentEntities.forEach((currentEntity) => {
-      if (
-        !selectedEntities.some(
-          (entity) => entity.text === currentEntity.text
-        ) &&
-        selectedEntities.every(
-          (entity) => currentEntity.text.length > entity.text.length
-        )
-      ) {
-        const regex = new RegExp(
-          `(${currentEntity.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-          "gi"
-        );
-        let match;
-        while ((match = regex.exec(value)) !== null) {
-          const matchIndex = match.index;
-          const matchEnd = regex.lastIndex;
-
-          // Skip if match is within already marked region: example if Dubai, United Arab Emirates and United Arab Emirates are both marked as PII
-          if (
-            alreadyMarked.some(
-              ([start, end]) => matchIndex >= start && matchEnd <= end
-            )
-          ) {
-            continue;
-          }
-
-          if (matchIndex >= lastIndex) {
-            // Append the text between the last match and this match
-            parts.push(value.substring(lastIndex, matchIndex));
-            parts.push(`[[MARKED:${match[0]}]]`);
-            // Update the last index to the end of this match
-            lastIndex = matchEnd;
-            // Track this marked region
-            alreadyMarked.push([matchIndex, matchEnd]);
+    const deltas = claimed.map((s) => ({
+      start: s.start,
+      end: s.end,
+      delta: s.placeholder.length - (s.end - s.start),
+    }));
+    for (const entity of remaining) {
+      if (!Array.isArray(entity.spans) || entity.spans.length === 0) continue;
+      const updated = [];
+      for (const span of entity.spans) {
+        let cumulative = 0;
+        let overlap = false;
+        for (const d of deltas) {
+          if (d.end <= span.start) {
+            cumulative += d.delta;
+          } else if (d.start >= span.end) {
+            break;
+          } else {
+            overlap = true;
+            break;
           }
         }
+        if (!overlap) {
+          updated.push({
+            start: span.start + cumulative,
+            end: span.end + cumulative,
+          });
+        }
       }
-    });
+      entity.spans = updated;
+    }
 
-    // Append any remaining text after the last match
-    parts.push(value.substring(lastIndex));
-
-    return parts.join("");
-  },
-
-  unmarkRegions: function (value) {
-    return value.replace(/\[\[MARKED:(.*?)\]\]/g, "$1");
+    // Composer was just rewritten so previous Ranges are stale; defer one
+    // frame so ProseMirror's mutation observer finishes normalizing before
+    // we attach new Ranges.
+    this.clearInlinePIIHighlights();
+    requestAnimationFrame(() => this.paintInlinePIIHighlights(remaining));
   },
 
   replacementEscapeRegExp: function (string) {
@@ -1110,7 +1159,7 @@ window.helper = {
           )
         );
         this.setComposerParagraphs(input, updatedParagraphs);
-        this.currentUserMessage = input.innerText;
+        this.currentUserMessage = this.getUserInputText();
       }
       // Keep the latest complete set of pairs for storage
       if (Array.isArray(partialAbstractResponse)) {

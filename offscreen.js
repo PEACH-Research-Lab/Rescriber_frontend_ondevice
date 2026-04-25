@@ -122,11 +122,27 @@ function isWebGPURuntimeError(err) {
 
 function mapEntities(raw) {
   return raw
-    .map((e) => ({
-      entity_type: LABEL_MAP[e.entity_group] || "UNKNOWN",
-      text: (e.word || "").trim(),
-      score: e.score,
-    }))
+    .map((e) => {
+      const word = e.word || "";
+      const text = word.trim();
+      // BPE word reconstruction can include leading/trailing whitespace; shift
+      // start/end inward by the same amount we trim, so offsets keep pointing
+      // exactly at the text we kept.
+      let start =
+        typeof e.start === "number" ? e.start : null;
+      let end = typeof e.end === "number" ? e.end : null;
+      if (start !== null && end !== null) {
+        start += word.length - word.trimStart().length;
+        end -= word.length - word.trimEnd().length;
+      }
+      return {
+        entity_type: LABEL_MAP[e.entity_group] || "UNKNOWN",
+        text,
+        score: e.score,
+        start,
+        end,
+      };
+    })
     .filter(
       (e) =>
         e.text.length > 0 &&
