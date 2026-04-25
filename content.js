@@ -1,3 +1,6 @@
+// `dlog` is declared and wired up in content_helper.js, which loads first
+// in the same content-script scope (see manifest.json content_scripts.js).
+
 let enabled;
 let previousEnabled;
 let detectedEntities = [];
@@ -9,7 +12,35 @@ let typingTimer;
 const doneTypingInterval = 1000;
 let isCheckingConversationChange = false;
 
-console.log("Content script loaded!");
+dlog("Content script loaded!");
+
+// ChatGPT's "Copy message" button writes from React state, which still
+// holds the placeholder tokens (e.g. [NAME1]) — the DOM only shows the
+// real PII because of our display-time overlay. After the native handler
+// fills the clipboard, read it back and substitute placeholders with the
+// original PII so the user pastes their actual data.
+document.addEventListener("click", (e) => {
+  if (!window.helper?.enabled) return;
+  const copyBtn = e.target.closest(
+    'button[data-testid="copy-turn-action-button"]'
+  );
+  if (!copyBtn) return;
+
+  const placeholderToPii = window.helper.getActivePlaceholderToPii();
+  if (!placeholderToPii || Object.keys(placeholderToPii).length === 0) return;
+
+  setTimeout(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      const restored = window.helper.restorePiiInText(text, placeholderToPii);
+      if (restored !== text) {
+        await navigator.clipboard.writeText(restored);
+      }
+    } catch (err) {
+      console.error("Rescriber: copy restore failed", err);
+    }
+  }, 80);
+});
 
 chrome.runtime.onMessage.addListener(async function (
   request,
@@ -298,7 +329,10 @@ const observer = new MutationObserver((mutations) => {
       );
 
       if (target) {
-        console.log("Children of message element (or deeper) changed:", target);
+        dlog(
+          "Children of message element changed; role=",
+          target.getAttribute?.("data-message-author-role")
+        );
         enqueueAndReplace(target);
       }
     }
@@ -401,7 +435,7 @@ async function initialize() {
     return;
   }
 
-  console.log("calling initialize button");
+  dlog("calling initialize button");
   // initializeButton();
   await requestAnimationFrame(waitForInitializeButton);
   observeStopButton();

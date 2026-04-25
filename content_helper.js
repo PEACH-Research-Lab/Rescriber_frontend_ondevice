@@ -1,3 +1,15 @@
+// Content scripts in MV3 load as classic scripts (the manifest's
+// "type":"module" on content_scripts is ignored by Chrome), so static ES
+// imports throw "Cannot use import statement outside a module". Use dynamic
+// import instead and reassign the `dlog` binding once the module resolves;
+// any logs that fire before then are silently dropped, which is fine.
+let dlog = () => {};
+import(chrome.runtime.getURL("debug.js"))
+  .then((mod) => {
+    dlog = mod.dlog;
+  })
+  .catch(() => {});
+
 window.helper = {
   enabled: undefined,
   detectedEntities: [],
@@ -159,7 +171,7 @@ window.helper = {
       this.tempActionHistory = [];
       this.tempAbstractMappings = {};
 
-      console.log("Mappings and counts loaded from storage.");
+      dlog("Mappings and counts loaded from storage.");
     } catch (error) {
       console.error("Error initializing mappings from storage:", error);
     }
@@ -184,7 +196,7 @@ window.helper = {
       this.detectionMode = result.detectionMode;
     }
     this.useOnDeviceModel = this.detectionMode === "ondevice";
-    console.log("Detection mode loaded:", this.detectionMode);
+    dlog("Detection mode loaded:", this.detectionMode);
   },
 
   getDetectionModelName: async function () {
@@ -415,7 +427,7 @@ window.helper = {
         entityCounts: filteredEntityCounts,
       });
 
-      console.log(
+      dlog(
         "Mappings and counts have been saved to storage, excluding 'no-url'."
       );
     } catch (error) {
@@ -564,7 +576,7 @@ window.helper = {
           await this.setToStorage({ abstractMappings: allMappings });
         }
 
-        console.log(
+        dlog(
           "Mappings and counts saved for conversation:",
           activeConversationId
         );
@@ -582,7 +594,7 @@ window.helper = {
 
   getResponseDetect: async function (userMessage) {
     let entities;
-    console.log("Detection mode:", this.detectionMode);
+    dlog("Detection mode:", this.detectionMode);
     if (this.detectionMode === "privacy_filter") {
       const { getPrivacyFilterResponseDetect } = await import(
         chrome.runtime.getURL("privacy_filter.js")
@@ -715,7 +727,12 @@ window.helper = {
     this.currentEntities = [];
 
     const onResultCallback = async (newEntities) => {
-      console.log("New entities received:", newEntities);
+      dlog(
+        "New entities received: count=",
+        newEntities.length,
+        "types=",
+        [...new Set(newEntities.map((e) => e.entity_type))]
+      );
       const filteredEntities = this.filterEntities(newEntities);
       if (filteredEntities.length === 0) return;
       let finalClusters = filteredEntities.map((entity) => [entity.text]);
@@ -759,7 +776,7 @@ window.helper = {
 
   handleDetectAndUpdatePanel: async function () {
     if (await this.handleDetect()) {
-      console.log("Detection and panel update complete!");
+      dlog("Detection and panel update complete!");
     } else {
       await this.updatePIIReplacementPanel(this.currentEntities);
     }
@@ -953,7 +970,7 @@ window.helper = {
     const inputField = this.getUserInputElement();
     const activeConversationId = this.getActiveConversationId() || "no-url";
 
-    console.log("Current active conversation ID:", activeConversationId);
+    dlog("Current active conversation ID:", activeConversationId);
 
     if (!this.entityCounts[activeConversationId]) {
       this.entityCounts[activeConversationId] = {};
@@ -1002,7 +1019,10 @@ window.helper = {
       }
     });
 
-    console.log("Updated mappings:", localMappings);
+    dlog(
+      "Updated mappings count:",
+      Object.keys(localMappings.piiToPlaceholder || {}).length
+    );
 
     const placeholderFor = (entity) =>
       localMappings.piiToPlaceholder[entity.text] || entity.entity_type;
@@ -1161,7 +1181,12 @@ window.helper = {
         text: pii,
       }));
 
-      console.log("Entities for current conversation:", entities);
+      dlog(
+        "Entities for current conversation: count=",
+        entities.length,
+        "types=",
+        [...new Set(entities.map((e) => e.entity_type))]
+      );
       return entities;
     } catch (error) {
       console.error("Error retrieving entities by conversation ID:", error);
@@ -1245,7 +1270,7 @@ window.helper = {
         if (!isNoUrl) {
           await this.setToStorage({ actionHistory: history });
         }
-        console.log(
+        dlog(
           `Dashboard: logged ${entries.length} abstract action(s) immediately`
         );
       }
@@ -1408,6 +1433,31 @@ window.helper = {
     const url = window.location.href;
     const conversationIdMatch = url.match(/\/c\/([a-z0-9-]+)/);
     return conversationIdMatch ? conversationIdMatch[1] : "no-url";
+  },
+
+  getActivePlaceholderToPii: function () {
+    const activeConversationId = this.getActiveConversationId();
+    if (activeConversationId === "no-url") {
+      return this.tempMappings.tempPlaceholderToPii || {};
+    }
+    return this.placeholderToPii[activeConversationId] || {};
+  },
+
+  restorePiiInText: function (text, placeholderToPii) {
+    if (typeof text !== "string" || !text) return text;
+    const entries = Object.entries(placeholderToPii || {});
+    if (entries.length === 0) return text;
+    // Sort by placeholder length desc so NAME11 is matched before NAME1.
+    entries.sort((a, b) => b[0].length - a[0].length);
+    const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    let result = text;
+    for (const [placeholder, pii] of entries) {
+      const esc = escapeRegExp(placeholder);
+      result = result
+        .replace(new RegExp(`\\[${esc}\\]`, "g"), pii)
+        .replace(new RegExp(`\\b${esc}\\b`, "g"), pii);
+    }
+    return result;
   },
 
   getFromStorage: function (keys) {
@@ -1573,7 +1623,7 @@ window.helper = {
           piiTexts: foundPlaceholders.map((e) => e.piiValue),
         });
         changed = true;
-        console.log(
+        dlog(
           `Dashboard: confirmed ${foundPlaceholders.length} replace action(s) from sent message`
         );
       }

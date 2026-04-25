@@ -1,3 +1,5 @@
+import { dlog } from "./debug.js";
+
 async function getApiKey() {
   const { openaiApiKey } = await new Promise((resolve, reject) => {
     chrome.storage.sync.get(["openaiApiKey"], (result) => {
@@ -147,9 +149,10 @@ export async function getCloudResponseCluster(userMessageCluster) {
     }
 
     const data = await response.json();
-    console.log(
-      "cloud model clustering result:",
-      data.choices[0].message.content
+    dlog(
+      `cloud model clustering result chars=${
+        (data.choices[0].message.content || "").length
+      }`
     );
     return data.choices[0].message.content;
   } catch (error) {

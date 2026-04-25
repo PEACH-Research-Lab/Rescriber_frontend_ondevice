@@ -3,6 +3,8 @@
 // which spins up (or reuses) an offscreen document running the
 // openai/privacy-filter model via Transformers.js.
 
+import { dlog } from "./debug.js";
+
 async function callPrivacyFilter(text) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(
@@ -107,7 +109,7 @@ export async function getPrivacyFilterResponseDetect(
   userMessage,
   onResultCallback
 ) {
-  console.log("[privacy_filter:detect] Input:", userMessage.slice(0, 200));
+  dlog(`[privacy_filter:detect] Input chars=${userMessage.length}`);
   const t0 = performance.now();
 
   const segmentation = await getSegmentationMode();
@@ -120,7 +122,7 @@ export async function getPrivacyFilterResponseDetect(
       await onResultCallback([...entities]);
     }
     const ms = (performance.now() - t0).toFixed(0);
-    console.log(
+    dlog(
       `[privacy_filter:detect] Done (${ms}ms, device=${
         response.device || "?"
       }, mode=whole): ${entities.length} entities`
@@ -129,7 +131,7 @@ export async function getPrivacyFilterResponseDetect(
   }
 
   const sentences = splitIntoSentences(userMessage);
-  console.log(
+  dlog(
     `[privacy_filter:detect] Split into ${sentences.length} sentence(s)`
   );
 
@@ -148,7 +150,7 @@ export async function getPrivacyFilterResponseDetect(
       if (typeof e.start === "number") e.start += segOffset;
       if (typeof e.end === "number") e.end += segOffset;
     }
-    console.log(
+    dlog(
       `[privacy_filter:detect] Sentence ${i + 1}/${sentences.length} (${
         sentence.length
       } chars): ${entities.length} entities`
@@ -162,7 +164,7 @@ export async function getPrivacyFilterResponseDetect(
   }
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(
+  dlog(
     `[privacy_filter:detect] Done (${ms}ms, device=${
       device || "?"
     }, mode=sentence): ${allEntities.length} entities across ${

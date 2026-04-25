@@ -7,7 +7,9 @@
 // retry storm on every call. The fallback decision is not persisted across
 // sessions, so a browser/extension reload will re-attempt WebGPU.
 
-console.log("[offscreen] script loading");
+import { dlog } from "./debug.js";
+
+dlog("[offscreen] script loading");
 
 const MODEL_ID = "openai/privacy-filter";
 
@@ -68,7 +70,7 @@ async function buildPipeline(device, dtype) {
     env.backends.onnx.wasm.numThreads = 1;
   }
 
-  console.log(
+  dlog(
     `[offscreen] Loading privacy-filter model (device=${device}, dtype=${dtype})…`
   );
   const t0 = performance.now();
@@ -77,7 +79,7 @@ async function buildPipeline(device, dtype) {
     dtype,
   });
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[offscreen] Model ready (${ms}ms)`);
+  dlog(`[offscreen] Model ready (${ms}ms)`);
   return classifier;
 }
 
@@ -218,7 +220,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         ? `, ${retries} webgpu retr${retries === 1 ? "y" : "ies"}`
         : "";
       const fallbackNote = fellBackToWasm ? ", fell back to wasm" : "";
-      console.log(
+      dlog(
         `[offscreen] ✓ ${entities.length} entities (${ms}ms, ${pipelineDevice}${retryNote}${fallbackNote})`
       );
       sendResponse({
@@ -246,7 +248,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true; // async response
 });
 
-console.log("[offscreen] message listener registered");
+dlog("[offscreen] message listener registered");
 
 // Settings wiring runs AFTER the message listener is registered, so even if
 // chrome.storage is unavailable or throws, the listener is already in place
@@ -268,7 +270,7 @@ async function loadSettings() {
     ) {
       currentThreshold = privacyFilterThreshold;
     }
-    console.log(
+    dlog(
       `[offscreen] Settings: aggregation=${currentAggregation} threshold=${currentThreshold}`
     );
   } catch (e) {

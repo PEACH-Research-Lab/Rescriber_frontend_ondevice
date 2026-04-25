@@ -1,6 +1,8 @@
 // presidio.js — Calls the local Presidio server for PII detection.
 // No LLM needed: uses NER + regex recognizers via Microsoft Presidio.
 
+import { dlog } from "./debug.js";
+
 const PRESIDIO_BASE = "http://localhost:5002";
 
 async function callPresidio(text, scoreThreshold = 0.4) {
@@ -35,14 +37,14 @@ async function callPresidio(text, scoreThreshold = 0.4) {
 }
 
 export async function getPresidioResponseDetect(userMessage, onResultCallback) {
-  console.log("[presidio:detect] Input:", userMessage.slice(0, 200));
+  dlog(`[presidio:detect] Input chars=${userMessage.length}`);
   const t0 = performance.now();
 
   const response = await callPresidio(userMessage);
   const entities = response.results || [];
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[presidio:detect] Done (${ms}ms): ${entities.length} entities`);
+  dlog(`[presidio:detect] Done (${ms}ms): ${entities.length} entities`);
 
   // Presidio returns all results at once (no streaming), so call back once
   if (onResultCallback && entities.length > 0) {

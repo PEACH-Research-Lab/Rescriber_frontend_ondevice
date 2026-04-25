@@ -135,6 +135,21 @@
       </p>
     </div>
 
+    <hr style="margin: 20px 0" />
+
+    <h2>Diagnostics</h2>
+    <label class="input-field">
+      <input type="checkbox" id="debugLogging" />
+      Enable verbose debug logging
+    </label>
+    <p style="font-size: 0.85em; color: #666;">
+      When off (default), Rescriber writes nothing about your prompts or
+      detected PII to any DevTools console — only errors. Turn this on only if
+      you're actively debugging an issue or asked to by support; it logs
+      prompt/entity metadata (lengths, types, counts) at the
+      <code>verbose</code> level. Turn it back off when you're done.
+    </p>
+
     <button id="saveButton" class="save-button">Save</button>
 
     <div class="stored-data-section">

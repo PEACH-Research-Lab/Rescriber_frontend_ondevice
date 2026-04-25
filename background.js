@@ -1,6 +1,20 @@
 // background.js — Proxies requests from content scripts to local Ollama instance.
 // Supports both streaming (via ports) and non-streaming (via messages).
 
+// Debug-logging gate (inlined here because the SW is a classic script, not a
+// module). Default off so prompts/PII don't reach the SW console in shipped
+// builds; flip via chrome.storage.sync.set({ debugLogging: true }).
+let DEBUG = false;
+chrome.storage.sync.get("debugLogging").then(({ debugLogging }) => {
+  DEBUG = !!debugLogging;
+});
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "sync" && changes.debugLogging) {
+    DEBUG = !!changes.debugLogging.newValue;
+  }
+});
+const dlog = (...a) => { if (DEBUG) console.debug(...a); };
+
 const OLLAMA_BASE = "http://localhost:11434";
 
 // --- Streaming via ports ---
@@ -12,8 +26,7 @@ chrome.runtime.onConnect.addListener((port) => {
     const model = request.model || "?";
     const userMsg =
       request.messages?.find((m) => m.role === "user")?.content || "";
-    const preview = userMsg.slice(0, 120) + (userMsg.length > 120 ? "…" : "");
-    console.log(`[Ollama:stream] ➜ model=${model}\n  user: "${preview}"`);
+    dlog(`[Ollama:stream] ➜ model=${model} chars=${userMsg.length}`);
 
     const url = `${OLLAMA_BASE}/api/chat`;
     const payload = {
@@ -70,7 +83,7 @@ chrome.runtime.onConnect.addListener((port) => {
             }
             if (chunk.done) {
               const ms = (performance.now() - t0).toFixed(0);
-              console.log(`[Ollama:stream] ✓ (${ms}ms) eval_count=${chunk.eval_count || 0}`);
+              dlog(`[Ollama:stream] ✓ (${ms}ms) eval_count=${chunk.eval_count || 0}`);
               port.postMessage({
                 type: "done",
                 stats: {
@@ -139,7 +152,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     (async () => {
       try {
         await ensureOffscreenDocument();
-        console.log("[privacy_filter] ✓ warmup: offscreen document ready");
+        dlog("[privacy_filter] ✓ warmup: offscreen document ready");
         sendResponse({ ok: true });
       } catch (err) {
         console.error(`[privacy_filter] ✗ warmup: ${err.message}`);
@@ -151,8 +164,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.type === "privacy_filter") {
     const t0 = performance.now();
-    const preview = (request.text || "").slice(0, 120);
-    console.log(`[privacy_filter] ➜ "${preview}"`);
+    dlog(`[privacy_filter] ➜ chars=${(request.text || "").length}`);
 
     (async () => {
       try {
@@ -165,7 +177,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (response?.error) {
           console.error(`[privacy_filter] ✗ (${ms}ms): ${response.error}`);
         } else {
-          console.log(
+          dlog(
             `[privacy_filter] ✓ (${ms}ms): ${
               response?.results?.length || 0
             } entities`
@@ -184,7 +196,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "presidio") {
     const t0 = performance.now();
     const url = `${PRESIDIO_BASE}${request.endpoint}`;
-    console.log(`[Presidio] ➜ ${request.endpoint}`);
+    dlog(`[Presidio] ➜ ${request.endpoint}`);
 
     fetch(url, {
       method: "POST",
@@ -197,7 +209,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })
       .then((data) => {
         const ms = (performance.now() - t0).toFixed(0);
-        console.log(`[Presidio] ✓ (${ms}ms): ${data.results?.length || 0} entities`);
+        dlog(`[Presidio] ✓ (${ms}ms): ${data.results?.length || 0} entities`);
         sendResponse(data);
       })
       .catch((err) => {
@@ -213,17 +225,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const model = request.payload?.model || "?";
     const userMsg =
       request.payload?.messages?.find((m) => m.role === "user")?.content || "";
-    const preview = userMsg.slice(0, 120) + (userMsg.length > 120 ? "…" : "");
-    console.log(
-      `[Ollama] ➜ ${request.endpoint} model=${model}\n  user: "${preview}"`
+    dlog(
+      `[Ollama] ➜ ${request.endpoint} model=${model} chars=${userMsg.length}`
     );
 
     fetchOllama(request.endpoint, request.payload)
       .then((data) => {
         const ms = (performance.now() - t0).toFixed(0);
-        const reply = data.message?.content || JSON.stringify(data).slice(0, 200);
-        console.log(
-          `[Ollama] ✓ ${request.endpoint} (${ms}ms)\n  response: ${reply.slice(0, 300)}`
+        const replyChars = (data.message?.content || "").length;
+        dlog(
+          `[Ollama] ✓ ${request.endpoint} (${ms}ms) reply_chars=${replyChars}`
         );
         sendResponse(data);
       })

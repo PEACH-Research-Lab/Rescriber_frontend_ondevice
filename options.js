@@ -12,6 +12,7 @@ document.getElementById("saveButton").addEventListener("click", () => {
   const detectionMode = document.querySelector(
     'input[name="detectionMode"]:checked'
   ).value;
+  const debugLogging = document.getElementById("debugLogging").checked;
 
   const aggregationRaw = document.getElementById("privacyFilterAggregation").value;
   const privacyFilterAggregation = VALID_AGGREGATIONS.includes(aggregationRaw)
@@ -38,6 +39,7 @@ document.getElementById("saveButton").addEventListener("click", () => {
       privacyFilterAggregation,
       privacyFilterThreshold,
       privacyFilterSegmentation,
+      debugLogging,
     },
     () => {
       alert("Settings saved.");
@@ -53,6 +55,7 @@ chrome.storage.sync.get(
     "privacyFilterAggregation",
     "privacyFilterThreshold",
     "privacyFilterSegmentation",
+    "debugLogging",
   ],
   (result) => {
     if (result.openaiApiKey) {
@@ -84,6 +87,7 @@ chrome.storage.sync.get(
       document.getElementById("privacyFilterSegmentation").value =
         result.privacyFilterSegmentation;
     }
+    document.getElementById("debugLogging").checked = !!result.debugLogging;
     updateSections();
   }
 );

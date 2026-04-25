@@ -9,7 +9,7 @@
     "48": "images/48.png",
     "128": "images/128.png"
   },
-  "permissions": ["activeTab", "storage", "scripting", "offscreen"],
+  "permissions": ["activeTab", "storage", "scripting", "offscreen", "clipboardRead", "clipboardWrite"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -42,6 +42,7 @@
         "ondevice.js",
         "presidio.js",
         "privacy_filter.js",
+        "debug.js",
         "offscreen.html",
         "offscreen.js",
         "vendor/transformers.min.js",

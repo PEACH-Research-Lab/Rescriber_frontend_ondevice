@@ -1,3 +1,5 @@
+import { dlog } from "./debug.js";
+
 // Queue for processing targets
 const processingQueue = [];
 let isProcessing = false;
@@ -59,7 +61,7 @@ function detectButtonChanges() {
   stopButton = document.querySelector("[data-testid='stop-button']");
 
   if (sendButton) {
-    console.log("Send button detected:", sendButton);
+    dlog("Send button detected");
     observeSendButton();
 
     // Check if the send button is enabled
@@ -75,7 +77,7 @@ function detectButtonChanges() {
   }
 
   if (stopButton) {
-    console.log("Stop button detected:", stopButton);
+    dlog("Stop button detected");
     handleStopButtonDetected();
   }
 }
@@ -98,11 +100,11 @@ function observeSendButton() {
       ) {
         // Check if the send button is enabled or disabled
         if (!sendButton.hasAttribute("disabled") && window.helper.enabled) {
-          console.log("Send button enabled");
+          dlog("Send button enabled");
           addDetectButton();
           await window.helper.updateCurrentConversationPIIToCloud();
         } else {
-          console.log("Send button disabled");
+          dlog("Send button disabled");
           removeDetectButton();
         }
       }
@@ -117,7 +119,7 @@ function observeSendButton() {
 
 // Handler for when the stop button is detected
 function handleStopButtonDetected() {
-  console.log("Stop button shows up. Remooving detect button...");
+  dlog("Stop button shows up. Removing detect button...");
   showInitialDetectIcon();
   window.helper.setShowInfoForNew(false);
 }

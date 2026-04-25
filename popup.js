@@ -1,6 +1,12 @@
 // popup.js
 
-console.log("Popup script loaded");
+let DEBUG = false;
+chrome.storage.sync.get("debugLogging", ({ debugLogging }) => {
+  DEBUG = !!debugLogging;
+});
+const dlog = (...a) => { if (DEBUG) console.debug(...a); };
+
+dlog("Popup script loaded");
 
 function updateButtonState(enabled) {
   const disableButton = document.getElementById("disableButton");
@@ -11,7 +17,7 @@ function updateButtonState(enabled) {
     disableButton.classList.remove("off");
     disableButton.textContent = "Disable";
   }
-  console.log("Button state updated:", enabled);
+  dlog("Button state updated:", enabled);
 }
 
 document.getElementById("disableButton").addEventListener("click", function () {
@@ -21,7 +27,7 @@ document.getElementById("disableButton").addEventListener("click", function () {
 
     chrome.storage.sync.set({ enabled: newEnabledState }, function () {
       updateButtonState(newEnabledState);
-      console.log("New state:", newEnabledState);
+      dlog("New state:", newEnabledState);
       updateEnabledStatus(newEnabledState);
     });
   });
@@ -36,7 +42,7 @@ function updateEnabledStatus(enabledStatus) {
         if (chrome.runtime.lastError) {
           console.error(chrome.runtime.lastError.message);
         } else {
-          console.log("Enabled status update sent");
+          dlog("Enabled status update sent");
         }
       }
     );

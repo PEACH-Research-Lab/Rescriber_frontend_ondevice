@@ -1,6 +1,8 @@
 // ondevice.js — Calls Ollama via the background service worker.
 // Uses streaming via ports for progressive UI updates.
 
+import { dlog } from "./debug.js";
+
 const DEFAULT_OLLAMA_MODEL = "llama3";
 
 async function getOllamaModel() {
@@ -215,17 +217,17 @@ async function callOllama(messages, format = "json") {
 }
 
 export async function getOnDeviceResponseDetect(userMessage, onResultCallback) {
-  console.log("[ondevice:detect] Input:", userMessage.slice(0, 200));
+  dlog(`[ondevice:detect] Input chars=${userMessage.length}`);
   const t0 = performance.now();
   const model = await getOllamaModel();
   const chunks = splitIntoChunks(userMessage);
   const allResults = [];
 
-  console.log(`[ondevice:detect] Split into ${chunks.length} chunk(s)`);
+  dlog(`[ondevice:detect] Split into ${chunks.length} chunk(s)`);
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    console.log(`[ondevice:detect] Chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
+    dlog(`[ondevice:detect] Chunk ${i + 1}/${chunks.length} (${chunk.length} chars)`);
 
     const stream = openOllamaStream(
       [
@@ -253,12 +255,12 @@ export async function getOnDeviceResponseDetect(userMessage, onResultCallback) {
   }
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[ondevice:detect] Done (${ms}ms): ${allResults.length} entities across ${chunks.length} chunk(s)`);
+  dlog(`[ondevice:detect] Done (${ms}ms): ${allResults.length} entities across ${chunks.length} chunk(s)`);
   return allResults;
 }
 
 export async function getOnDeviceResponseCluster(userMessageCluster) {
-  console.log("[ondevice:cluster] Input:", userMessageCluster.slice(0, 200));
+  dlog(`[ondevice:cluster] Input chars=${userMessageCluster.length}`);
   const t0 = performance.now();
 
   const response = await callOllama([
@@ -267,7 +269,11 @@ export async function getOnDeviceResponseCluster(userMessageCluster) {
   ]);
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[ondevice:cluster] Raw response (${ms}ms):`, response.message?.content);
+  dlog(
+    `[ondevice:cluster] Done (${ms}ms) reply_chars=${
+      (response.message?.content || "").length
+    }`
+  );
 
   let content;
   try {
@@ -289,7 +295,9 @@ export async function getOnDeviceAbstractResponse(
   onResultCallback
 ) {
   const userPrompt = `Text: ${currentMessage}\nProtected information: ${abstractList.join(", ")}`;
-  console.log("[ondevice:abstract] Input:", userPrompt.slice(0, 200));
+  dlog(
+    `[ondevice:abstract] Input chars=${userPrompt.length} protected_count=${abstractList.length}`
+  );
   const t0 = performance.now();
   const model = await getOllamaModel();
 
@@ -309,6 +317,9 @@ export async function getOnDeviceAbstractResponse(
   );
 
   const ms = (performance.now() - t0).toFixed(0);
-  console.log(`[ondevice:abstract] Response (${ms}ms):`, content);
-  console.log("[ondevice:abstract] Parsed results:", results);
+  dlog(
+    `[ondevice:abstract] Done (${ms}ms) reply_chars=${
+      (content || "").length
+    } pairs=${Array.isArray(results) ? results.length : 0}`
+  );
 }
