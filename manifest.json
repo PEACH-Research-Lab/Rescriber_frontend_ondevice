@@ -1,16 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Rescriber",
-  "version": "1.0",
-  "description": "Chrome extension for detecting and redacting PII in ChatGPT prompts.",
+  "version": "1.0.1",
+  "description": "Detect and redact PII in your ChatGPT prompts before you send them. Runs entirely in your browser — no server, no API key.",
   "icons": {
     "16": "images/16.png",
     "32": "images/32.png",
     "48": "images/48.png",
     "128": "images/128.png"
   },
-  "permissions": ["activeTab", "storage", "scripting", "offscreen", "clipboardRead", "clipboardWrite"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["storage", "offscreen", "clipboardRead", "clipboardWrite"],
+  "host_permissions": [
+    "https://huggingface.co/*",
+    "https://*.huggingface.co/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -38,9 +41,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "openai.js",
-        "ondevice.js",
-        "presidio.js",
         "privacy_filter.js",
         "debug.js",
         "offscreen.html",

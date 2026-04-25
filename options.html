@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Extension Options</title>
+    <title>Rescriber — Options</title>
     <style>
       body {
         font-family: Arial, sans-serif;
         margin: 20px;
+        max-width: 720px;
       }
       .input-field {
         display: block;
@@ -52,88 +53,76 @@
       #viewStoredDataButton:hover {
         background-color: #5a6268;
       }
+      .disclaimer {
+        font-size: 12px;
+        color: #6a737d;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
-    <h1>Extension Options</h1>
-    <label class="input-field" for="apiKey">OpenAI API key:</label>
-    <input type="text" id="apiKey" class="input-field" />
+    <h1>Rescriber Options</h1>
+    <p class="disclaimer">
+      Rescriber is an independent project and is not affiliated with, endorsed
+      by, or sponsored by OpenAI.
+    </p>
 
-    <hr style="margin: 20px 0" />
-
-    <h2>Detection Mode</h2>
+    <h2>Privacy Filter Settings</h2>
+    <p style="font-size: 0.9em; color: #444;">
+      Runs the <code>openai/privacy-filter</code> model entirely in your browser
+      via Transformers.js. No server or API key needed.<br />
+      First run downloads the model from <code>huggingface.co</code>
+      (~30–50&nbsp;MB, cached afterwards). WebGPU is used when available, with
+      WASM fallback.<br />
+      Detects: names, emails, phones, addresses, URLs, dates, account numbers,
+      secrets.
+    </p>
     <label class="input-field">
-      <input type="radio" name="detectionMode" value="privacy_filter" checked /> Privacy Filter (in-browser, WebGPU) — default
+      Segmentation:
+      <select id="privacyFilterSegmentation">
+        <option value="whole" selected>
+          Whole text (scan the full input in one pass) — default
+        </option>
+        <option value="sentence">
+          Per-sentence (split text, scan each sentence, aggregate)
+        </option>
+      </select>
     </label>
+    <p style="font-size: 0.85em; color: #666;">
+      Per-sentence keeps each model call short (useful when inputs are long or
+      the model's context window is limiting); whole-text gives the model full
+      surrounding context, which can improve recall on entities that span or
+      depend on neighboring sentences.
+    </p>
     <label class="input-field">
-      <input type="radio" name="detectionMode" value="ondevice" /> On-Device LLM (Ollama)
+      Aggregation strategy:
+      <select id="privacyFilterAggregation">
+        <option value="simple" selected>
+          simple (merge adjacent same-type tokens into spans) — default
+        </option>
+        <option value="none">none (one result per token, no merging)</option>
+      </select>
     </label>
+    <p style="font-size: 0.85em; color: #666;">
+      Transformers.js only supports <code>simple</code> and <code>none</code>.
+      Word-level strategies (<code>first</code> / <code>average</code> /
+      <code>max</code>) are Python-transformers only.
+    </p>
     <label class="input-field">
-      <input type="radio" name="detectionMode" value="cloud" /> Cloud LLM (OpenAI)
+      Score threshold (0.0–1.0):
+      <input
+        type="number"
+        id="privacyFilterThreshold"
+        min="0"
+        max="1"
+        step="0.01"
+        value="0"
+      />
     </label>
-    <label class="input-field">
-      <input type="radio" name="detectionMode" value="presidio" /> Presidio (no LLM)
-    </label>
-
-    <div id="privacyFilterSection">
-      <h3>Privacy Filter Settings</h3>
-      <p style="font-size: 0.9em; color: #666;">
-        Runs the <code>openai/privacy-filter</code> model entirely in your browser
-        via Transformers.js. No server or API key needed.<br/>
-        First run downloads the model (~30–50&nbsp;MB, cached afterwards).
-        WebGPU is used when available, with WASM fallback.<br/>
-        Detects: names, emails, phones, addresses, URLs, dates, account numbers, secrets.
-      </p>
-      <label class="input-field">
-        Segmentation:
-        <select id="privacyFilterSegmentation">
-          <option value="whole" selected>Whole text (scan the full input in one pass) — default</option>
-          <option value="sentence">Per-sentence (split text, scan each sentence, aggregate)</option>
-        </select>
-      </label>
-      <p style="font-size: 0.85em; color: #666;">
-        Per-sentence keeps each model call short (useful when inputs are long
-        or the model's context window is limiting); whole-text gives the model
-        full surrounding context, which can improve recall on entities that
-        span or depend on neighboring sentences.
-      </p>
-      <label class="input-field">
-        Aggregation strategy:
-        <select id="privacyFilterAggregation">
-          <option value="simple" selected>simple (merge adjacent same-type tokens into spans) — default</option>
-          <option value="none">none (one result per token, no merging)</option>
-        </select>
-      </label>
-      <p style="font-size: 0.85em; color: #666;">
-        Transformers.js only supports <code>simple</code> and <code>none</code>.
-        Word-level strategies (<code>first</code> / <code>average</code> / <code>max</code>)
-        are Python-transformers only.
-      </p>
-      <label class="input-field">
-        Score threshold (0.0–1.0):
-        <input type="number" id="privacyFilterThreshold" min="0" max="1" step="0.01" value="0" />
-      </label>
-      <p style="font-size: 0.85em; color: #666;">
-        Lower threshold → higher recall (more detections, more false positives).
-        Higher threshold → higher precision. <code>0</code> disables filtering.
-      </p>
-    </div>
-
-    <div id="ollamaSection" style="display:none">
-      <h3>Ollama Settings</h3>
-      <label class="input-field">
-        Model name:
-        <input type="text" id="ollamaModel" class="input-field" placeholder="llama3" />
-      </label>
-    </div>
-
-    <div id="presidioSection" style="display:none">
-      <h3>Presidio Settings</h3>
-      <p style="font-size: 0.9em; color: #666;">
-        Requires the Presidio server running locally.<br/>
-        Run: <code>python presidio_server.py</code> (port 5002)
-      </p>
-    </div>
+    <p style="font-size: 0.85em; color: #666;">
+      Lower threshold → higher recall (more detections, more false positives).
+      Higher threshold → higher precision. <code>0</code> disables filtering.
+    </p>
 
     <hr style="margin: 20px 0" />
 

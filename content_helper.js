@@ -16,8 +16,7 @@ window.helper = {
   currentEntities: [],
   currentUserMessage: "",
   previousStatesByConversation: {},
-  useOnDeviceModel: false,
-  detectionMode: "privacy_filter", // "privacy_filter", "ondevice", "cloud", or "presidio"
+  detectionMode: "privacy_filter",
   showInfoForNew: undefined,
 
   placeholderToPii: {},
@@ -189,32 +188,12 @@ window.helper = {
   },
 
   loadDetectionMode: async function () {
-    const result = await new Promise((resolve) => {
-      chrome.storage.sync.get(["detectionMode"], (r) => resolve(r));
-    });
-    if (result.detectionMode) {
-      this.detectionMode = result.detectionMode;
-    }
-    this.useOnDeviceModel = this.detectionMode === "ondevice";
+    this.detectionMode = "privacy_filter";
     dlog("Detection mode loaded:", this.detectionMode);
   },
 
   getDetectionModelName: async function () {
-    switch (this.detectionMode) {
-      case "privacy_filter":
-        return "Privacy Filter";
-      case "presidio":
-        return "Presidio";
-      case "ondevice": {
-        const { ollamaModel } = await new Promise((resolve) =>
-          chrome.storage.sync.get(["ollamaModel"], (r) => resolve(r))
-        );
-        return `Ollama (${ollamaModel || "llama3"})`;
-      }
-      case "cloud":
-      default:
-        return "GPT-4o";
-    }
+    return "Privacy Filter";
   },
 
   getUserInputElement: function () {
@@ -593,58 +572,15 @@ window.helper = {
   },
 
   getResponseDetect: async function (userMessage) {
-    let entities;
-    dlog("Detection mode:", this.detectionMode);
-    if (this.detectionMode === "privacy_filter") {
-      const { getPrivacyFilterResponseDetect } = await import(
-        chrome.runtime.getURL("privacy_filter.js")
-      );
-      entities = await getPrivacyFilterResponseDetect(userMessage);
-    } else if (this.detectionMode === "presidio") {
-      const { getPresidioResponseDetect } = await import(
-        chrome.runtime.getURL("presidio.js")
-      );
-      try {
-        entities = await getPresidioResponseDetect(userMessage);
-      } catch (err) {
-        console.error("[presidio:detect] failed:", err.message);
-        entities = [];
-      }
-    } else if (!this.useOnDeviceModel) {
-      const { getCloudResponseDetect } = await import(
-        chrome.runtime.getURL("openai.js")
-      );
-      entities = await getCloudResponseDetect(userMessage);
-    } else {
-      const { getOnDeviceResponseDetect } = await import(
-        chrome.runtime.getURL("ondevice.js")
-      );
-      entities = await getOnDeviceResponseDetect(userMessage);
-    }
-    return entities;
+    const { getPrivacyFilterResponseDetect } = await import(
+      chrome.runtime.getURL("privacy_filter.js")
+    );
+    return await getPrivacyFilterResponseDetect(userMessage);
   },
 
-  getResponseCluster: async function (clusterMessage) {
-    // Non-LLM detection modes: skip semantic clustering.
-    if (
-      this.detectionMode === "presidio" ||
-      this.detectionMode === "privacy_filter"
-    ) {
-      return "{}";
-    }
-    let clustersResponse;
-    if (!this.useOnDeviceModel) {
-      const { getCloudResponseCluster } = await import(
-        chrome.runtime.getURL("openai.js")
-      );
-      clustersResponse = await getCloudResponseCluster(clusterMessage);
-    } else {
-      const { getOnDeviceResponseCluster } = await import(
-        chrome.runtime.getURL("ondevice.js")
-      );
-      clustersResponse = await getOnDeviceResponseCluster(clusterMessage);
-    }
-    return clustersResponse;
+  getResponseCluster: async function () {
+    // Privacy Filter does no semantic clustering — each entity is its own cluster.
+    return "{}";
   },
 
   filterEntities: function (entities) {
@@ -746,26 +682,10 @@ window.helper = {
       await this.updatePIIReplacementPanel(this.currentEntities);
     };
 
-    if (this.detectionMode === "privacy_filter") {
-      const { getPrivacyFilterResponseDetect } = await import(
-        chrome.runtime.getURL("privacy_filter.js")
-      );
-      await getPrivacyFilterResponseDetect(userMessage, onResultCallback);
-    } else if (this.detectionMode === "presidio") {
-      const { getPresidioResponseDetect } = await import(
-        chrome.runtime.getURL("presidio.js")
-      );
-      try {
-        await getPresidioResponseDetect(userMessage, onResultCallback);
-      } catch (err) {
-        console.error("[presidio:detect] failed:", err.message);
-      }
-    } else {
-      const { getOnDeviceResponseDetect } = await import(
-        chrome.runtime.getURL("ondevice.js")
-      );
-      await getOnDeviceResponseDetect(userMessage, onResultCallback);
-    }
+    const { getPrivacyFilterResponseDetect } = await import(
+      chrome.runtime.getURL("privacy_filter.js")
+    );
+    await getPrivacyFilterResponseDetect(userMessage, onResultCallback);
 
     if (this.currentEntities.length === 0) {
       return false;
@@ -1322,59 +1242,16 @@ window.helper = {
     abstractList,
     onResultCallback
   ) {
-    let abstractResponse = "";
-    // Non-LLM modes: no LLM available, fall back to placeholder abstraction.
-    // privacy_filter mode hides the Abstract button entirely, so this branch
-    // should rarely execute; it stays as a safety net.
-    if (
-      this.detectionMode === "presidio" ||
-      this.detectionMode === "privacy_filter"
-    ) {
-      const convId = this.getActiveConversationId() || "no-url";
-      const convMappings = this.piiToPlaceholder[convId] || {};
-      const results = abstractList.map((pii) => {
-        const placeholder = convMappings[pii] || "REDACTED";
-        return { protected: pii, abstracted: `[${placeholder}]` };
-      });
-      abstractResponse = results;
-      onResultCallback(results);
-      return abstractResponse;
-    }
-    if (!this.useOnDeviceModel) {
-      const { getCloudAbstractResponse } = await import(
-        chrome.runtime.getURL("openai.js")
-      );
-      const abstractResponseResult = await getCloudAbstractResponse(
-        originalMessage,
-        currentMessage,
-        abstractList
-      );
-      const abstractResponseObject = JSON.parse(abstractResponseResult);
-      if (abstractResponseObject) {
-        abstractResponse = abstractResponseObject.text;
-        // Since cloud models are not streamed, call callback with the final result
-        onResultCallback(abstractResponse);
-      } else {
-        abstractResponse = undefined;
-      }
-    } else {
-      const { getOnDeviceAbstractResponse } = await import(
-        chrome.runtime.getURL("ondevice.js")
-      );
-      // Stream the results and update in real-time via the callback
-      await getOnDeviceAbstractResponse(
-        originalMessage,
-        currentMessage,
-        abstractList,
-        (partialResult) => {
-          // Update the cumulative abstract response
-          abstractResponse = partialResult;
-          // Call the provided callback for UI updates
-          onResultCallback(partialResult);
-        }
-      );
-    }
-    return abstractResponse;
+    // Privacy Filter mode hides the Abstract button entirely, so this is only
+    // a safety net — fall back to a placeholder substitution.
+    const convId = this.getActiveConversationId() || "no-url";
+    const convMappings = this.piiToPlaceholder[convId] || {};
+    const results = abstractList.map((pii) => {
+      const placeholder = convMappings[pii] || "REDACTED";
+      return { protected: pii, abstracted: `[${placeholder}]` };
+    });
+    onResultCallback(results);
+    return results;
   },
 
   applyAbstractResponse: function (
