@@ -89,6 +89,13 @@ Prompts and detected PII are processed locally and never sent over the network.
 
 `chrome://extensions` → locate **Rescriber** → **Remove**.
 
+## Licenses
+
+Rescriber's own source is MIT — see [LICENSE](LICENSE). The bundled
+Transformers.js and ONNX Runtime Web assets in `vendor/` carry their
+upstream licenses; full notices are in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
 ## Paper
 
 [Rescriber: Smaller-LLM-Powered User-Led Data Minimization for LLM-Based Chatbots](https://dl.acm.org/doi/10.1145/3706598.3713701)
