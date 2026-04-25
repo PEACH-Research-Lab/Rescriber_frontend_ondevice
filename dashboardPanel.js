@@ -1,3 +1,22 @@
+// Defense-in-depth: anything we interpolate into innerHTML that isn't a
+// number we control needs escaping. `label` derives from entity types
+// (model output in some detection modes), and `day` from locale-formatted
+// dates — both stay in a fixed shape today, but the cost of escaping is
+// nil and an upstream change otherwise becomes a stored-XSS risk.
+function escapeHtml(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c])
+  );
+}
+
 export function createDashboardPanel(data) {
   const link = document.createElement("link");
   link.rel = "stylesheet";
@@ -48,7 +67,7 @@ export function createDashboardPanel(data) {
     const pct = Math.max(8, (count / maxTypeCount) * 100);
     const replaceCount = typeActions.replace[type] || 0;
     const abstractCount = typeActions.abstract[type] || 0;
-    const label = formatTypeName(type);
+    const label = escapeHtml(formatTypeName(type));
     return `
       <div class="type-bar-row">
         <span class="type-bar-label">${label}</span>
@@ -80,13 +99,14 @@ export function createDashboardPanel(data) {
         const heightPct = Math.max(6, (total / maxDayTotal) * 100);
         const rPct = total > 0 ? (r / total) * heightPct : 0;
         const aPct = total > 0 ? (a / total) * heightPct : 0;
+        const safeDay = escapeHtml(day);
         return `
-          <div class="timeline-bar-group" title="${day}: ${r} replaced, ${a} abstracted">
+          <div class="timeline-bar-group" title="${safeDay}: ${r} replaced, ${a} abstracted">
             <div class="timeline-bar-stack" style="height: ${heightPct}%">
               <div class="timeline-bar-replace" style="height: ${rPct > 0 ? (rPct / heightPct) * 100 : 0}%"></div>
               <div class="timeline-bar-abstract" style="height: ${aPct > 0 ? (aPct / heightPct) * 100 : 0}%"></div>
             </div>
-            <span class="timeline-label">${day}</span>
+            <span class="timeline-label">${safeDay}</span>
           </div>
         `;
       }).join("")

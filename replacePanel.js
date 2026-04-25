@@ -1,3 +1,22 @@
+// Detected entity text comes verbatim from whatever the user pasted into the
+// composer. Interpolating it into innerHTML or a quoted attribute without
+// escaping lets pasted HTML execute in the chatgpt.com origin (e.g.
+// `<img src=x onerror=…>`). Escape every interpolation that touches
+// untrusted strings, including the model name shown in the header.
+function escapeHtml(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c])
+  );
+}
+
 export function createPIIReplacementPanel(
   detectedEntities,
   modelName,
@@ -25,11 +44,15 @@ export function createPIIReplacementPanel(
     .map(
       (entity) => `
       <li class="pii-item">
-        <span>${entity.text} - ${entity.entity_placeholder}</span>
+        <span>${escapeHtml(entity.text)} - ${escapeHtml(
+        entity.entity_placeholder
+      )}</span>
         ${
           hideCheckboxes
             ? ""
-            : `<input type="checkbox" class="pii-checkbox" data-entity-text="${entity.text}">`
+            : `<input type="checkbox" class="pii-checkbox" data-entity-text="${escapeHtml(
+                entity.text
+              )}">`
         }
       </li>`
     )
@@ -41,9 +64,9 @@ export function createPIIReplacementPanel(
           <p>Rescriber</p>
         </div>
         <div class="tool-model-number">
-          <p>${modelName}</p>
+          <p>${escapeHtml(modelName)}</p>
         </div>
-      </div> 
+      </div>
       <div class="right-corner-buttons">
         <div class="top-row">
           <button id="highlight-btn">Highlight</button>
