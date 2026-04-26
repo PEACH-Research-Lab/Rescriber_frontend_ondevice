@@ -1553,9 +1553,50 @@ window.helper = {
       // Update current entities by using the mappings from cloud
       this.updateCurrentEntitiesByPIIMappings(piiToPlaceholder);
       this.replaceTextInElement(element, highlightMappings);
+
+      // ChatGPT re-renders the assistant message after our initial pass — to
+      // finalize punctuation, swap out the streaming-animation wrapper, etc. —
+      // and React's reconciliation drops our injected highlight spans, so the
+      // raw [NAME1] reappears. Watch the element and reapply whenever a raw
+      // placeholder shows up.
+      this.installRerenderReapplyWatcher(element, highlightMappings);
     } catch (error) {
       console.error("Error fetching PII mappings:", error);
     }
+  },
+
+  installRerenderReapplyWatcher: function (element, highlightMappings) {
+    if (!element || !highlightMappings) return;
+    const placeholders = Object.keys(highlightMappings);
+    if (placeholders.length === 0) return;
+    if (element.hasAttribute("data-rescriber-rerender-watch")) return;
+    element.setAttribute("data-rescriber-rerender-watch", "true");
+
+    const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const rawRegex = new RegExp(
+      placeholders.map((p) => `\\[${escapeRegExp(p)}\\]`).join("|")
+    );
+
+    let scheduled = false;
+    const watcher = new MutationObserver(() => {
+      if (scheduled) return;
+      if (!rawRegex.test(element.textContent || "")) return;
+      scheduled = true;
+      // Defer to a microtask so React finishes its current commit before we
+      // reapply — otherwise our DOM edits race the reconciler and get clobbered
+      // again. The same regex check inside the callback debounces our own
+      // mutations against the watcher.
+      queueMicrotask(() => {
+        scheduled = false;
+        if (!rawRegex.test(element.textContent || "")) return;
+        this.replaceTextInElement(element, highlightMappings);
+      });
+    });
+    watcher.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
   },
 
   // Scan a rendered user message to confirm replace actions.
