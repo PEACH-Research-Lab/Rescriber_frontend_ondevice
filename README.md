@@ -90,6 +90,12 @@ Open the extension's options page (right-click the toolbar icon →
 3. If you were running the backend server, stop it (`Ctrl+C` in its terminal)
    and delete its folder.
 
+## Privacy policy
+
+The full policy is at
+[docs/privacy.html](docs/privacy.html), served via GitHub Pages at
+https://peach-research-lab.github.io/Rescriber_frontend_ondevice/privacy.html.
+
 ## Licenses
 
 Rescriber's own source is MIT — see [LICENSE](LICENSE). The bundled

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Rescriber</title>
+    <meta
+      name="description"
+      content="Privacy policy for the Rescriber Chrome extension."
+    />
+    <style>
+      :root {
+        --fg: #1f2328;
+        --muted: #57606a;
+        --border: #d0d7de;
+        --bg-alt: #f6f8fa;
+        --link: #0969da;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+          Arial, sans-serif;
+        line-height: 1.55;
+        color: var(--fg);
+        max-width: 760px;
+        margin: 32px auto 80px;
+        padding: 0 20px;
+      }
+      h1 { margin-bottom: 4px; }
+      .subtitle { color: var(--muted); margin: 0 0 28px; font-size: 14px; }
+      h2 { margin-top: 32px; font-size: 20px; }
+      h3 { margin-top: 24px; font-size: 16px; }
+      a { color: var(--link); }
+      code {
+        background: var(--bg-alt);
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-size: 0.92em;
+      }
+      ul { padding-left: 22px; }
+      li { margin: 4px 0; }
+      .summary {
+        border: 1px solid var(--border);
+        background: var(--bg-alt);
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 12px 0 24px;
+      }
+      .summary p { margin: 6px 0; }
+      .footer {
+        margin-top: 48px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Rescriber — Privacy Policy</h1>
+    <p class="subtitle">Effective date: 2026-04-25</p>
+
+    <div class="summary">
+      <p><strong>Short version:</strong></p>
+      <p>
+        Rescriber detects personally identifiable information (PII) in your
+        ChatGPT prompts so you can replace it with placeholders before
+        sending. Detection runs entirely in your browser. We do not collect,
+        transmit, sell, or share your prompts, your detected PII, or any
+        analytics.
+      </p>
+    </div>
+
+    <h2>Who this policy covers</h2>
+    <p>
+      This policy describes how the <strong>Rescriber</strong> Chrome
+      extension ("the extension") handles user data. It applies to the
+      extension as published on the Chrome Web Store and the equivalent
+      source code in this repository. Rescriber is an independent project
+      and is not affiliated with, endorsed by, or sponsored by OpenAI.
+    </p>
+
+    <h2>What the extension does</h2>
+    <p>
+      When you visit <code>chatgpt.com</code>, the extension reads the text
+      you have typed into the ChatGPT composer, runs a local PII-detection
+      model on it, and shows you a panel where you can choose to replace
+      detected items (names, emails, phone numbers, addresses, URLs, dates,
+      account numbers, secrets) with placeholders. If you replace items and
+      then send the message, the extension keeps a local mapping so that
+      when ChatGPT echoes a placeholder back, the original value is shown
+      to you in-place. You can disable the extension or clear the stored
+      data at any time.
+    </p>
+
+    <h2>What we collect</h2>
+    <p>
+      <strong>Nothing is collected by the developer.</strong> The extension
+      does not transmit your prompts, your detected PII, your placeholder
+      mappings, or any usage analytics to the developer or to any third
+      party.
+    </p>
+
+    <h2>What is stored locally on your device</h2>
+    <p>
+      The extension uses Chrome's built-in storage APIs to persist data on
+      your computer. None of this data leaves your machine.
+    </p>
+    <h3>Stored in <code>chrome.storage.local</code> (this browser only)</h3>
+    <ul>
+      <li>
+        <code>piiToPlaceholder</code> /
+        <code>placeholderToPii</code> — per-conversation mappings between
+        original PII text and the placeholder you chose, keyed by the
+        ChatGPT conversation ID.
+      </li>
+      <li>
+        <code>entityCounts</code> — per-conversation counts used to
+        generate placeholder labels (<code>NAME1</code>, <code>NAME2</code>,
+        …).
+      </li>
+      <li>
+        <code>actionHistory</code> — a local log of replace/abstract
+        actions you took, used to power the in-extension privacy
+        dashboard.
+      </li>
+      <li>
+        <code>abstractMappings</code> — additional context used to render
+        replaced text inside ChatGPT responses.
+      </li>
+    </ul>
+    <h3>Stored in <code>chrome.storage.sync</code> (UI preferences only)</h3>
+    <p>
+      <code>storage.sync</code> is replicated by Chrome across the browsers
+      where you are signed into the same Google account. Rescriber only
+      uses it for non-sensitive UI preferences:
+    </p>
+    <ul>
+      <li>Whether the extension is enabled.</li>
+      <li>
+        Privacy Filter settings: segmentation mode, aggregation strategy,
+        score threshold.
+      </li>
+      <li>The verbose-logging diagnostic flag.</li>
+    </ul>
+    <p>
+      Prompt content, detected PII, and placeholder mappings are
+      <strong>never</strong> written to <code>storage.sync</code>.
+    </p>
+    <h3>Browser cache</h3>
+    <p>
+      The first time you use Privacy Filter, the browser downloads the
+      <code>openai/privacy-filter</code> model files (configuration,
+      tokenizer, ONNX weights, ~30–50 MB) from
+      <code>huggingface.co</code> and stores them in the browser's normal
+      HTTP cache so subsequent runs are offline-capable. These files are
+      data, not executable code from a third party.
+    </p>
+
+    <h2>Network requests</h2>
+    <p>The extension makes outbound network requests only to:</p>
+    <ul>
+      <li>
+        <code>https://huggingface.co</code> and
+        <code>https://*.huggingface.co</code> — to fetch the
+        <code>openai/privacy-filter</code> model artifacts referenced
+        above. Hugging Face's privacy practices govern that request; their
+        policy is at
+        <a href="https://huggingface.co/privacy" rel="noopener noreferrer"
+          >huggingface.co/privacy</a
+        >.
+      </li>
+    </ul>
+    <p>
+      No prompt content, no detected PII, and no usage analytics are sent
+      with these requests; only the standard HTTP request needed to
+      retrieve the model files.
+    </p>
+
+    <h2>Permissions, and why each is needed</h2>
+    <ul>
+      <li>
+        <strong><code>storage</code></strong> — to persist the local data
+        described above.
+      </li>
+      <li>
+        <strong><code>offscreen</code></strong> — Chrome service workers
+        cannot run WebGPU reliably, so the PII-detection model runs in an
+        offscreen document.
+      </li>
+      <li>
+        <strong><code>clipboardRead</code></strong> /
+        <strong><code>clipboardWrite</code></strong> — when you click
+        ChatGPT's "Copy message" button, the extension reads what was
+        copied and rewrites placeholders back to your original PII so the
+        clipboard contains the values you actually want to paste.
+      </li>
+      <li>
+        <strong>Host access to <code>huggingface.co</code></strong> — to
+        download the detection model. The extension does not request
+        access to any other website.
+      </li>
+      <li>
+        <strong>Content script on <code>chatgpt.com</code></strong> — the
+        composer, the message panel, and the placeholder restoration UI
+        only need to run on ChatGPT pages.
+      </li>
+    </ul>
+
+    <h2>Third parties</h2>
+    <p>
+      The extension does not use third-party analytics, advertising, or
+      tracking SDKs. The only third-party service contacted is
+      <strong>Hugging Face</strong>, solely to download the public
+      <code>openai/privacy-filter</code> model on first use.
+    </p>
+
+    <h2>Sale or sharing of data</h2>
+    <p>
+      We do not sell, rent, or share any user data, because we do not
+      collect any user data.
+    </p>
+
+    <h2>Your controls</h2>
+    <ul>
+      <li>
+        Disable Rescriber at any time from the toolbar popup, or remove it
+        from <code>chrome://extensions</code>.
+      </li>
+      <li>
+        From the extension's <strong>Options → View stored data</strong>
+        page you can inspect, edit, and delete every piece of local
+        storage Rescriber has written, individually or all at once.
+      </li>
+      <li>
+        Removing the extension from Chrome deletes its local storage as
+        well.
+      </li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>
+      Rescriber is not directed to children under 13 and does not
+      knowingly collect data from any user.
+    </p>
+
+    <h2>Compliance with Chrome Web Store policies</h2>
+    <p>
+      Rescriber's collection and use of any user data complies with the
+      Chrome Web Store
+      <a
+        href="https://developer.chrome.com/docs/webstore/program-policies/limited-use"
+        rel="noopener noreferrer"
+        >Limited Use requirements</a
+      >. Specifically, the extension does not transfer user data to third
+      parties, does not use user data for advertising or to determine
+      creditworthiness, and does not allow humans to read user data
+      except as required for security or with the user's explicit
+      consent.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      Material changes will be reflected in the "Effective date" above and
+      committed to the project's public repository. Continued use of the
+      extension after a change indicates acceptance of the updated policy.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions about this policy or the extension's data handling can be
+      directed to the developer at
+      <a href="mailto:tia.li@northeastern.edu">tia.li@northeastern.edu</a>.
+    </p>
+
+    <p class="footer">
+      Source code:
+      <a
+        href="https://github.com/PEACH-Research-Lab/Rescriber_frontend_ondevice"
+        rel="noopener noreferrer"
+        >github.com/PEACH-Research-Lab/Rescriber_frontend_ondevice</a
+      >.
+    </p>
+  </body>
+</html>
