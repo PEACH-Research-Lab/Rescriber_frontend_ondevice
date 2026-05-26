@@ -6,6 +6,12 @@ via the [`openai/privacy-filter`](https://huggingface.co/openai/privacy-filter)
 token-classification model loaded with Transformers.js — no server, no API key,
 no prompt text leaves the machine.
 
+[![Available in the Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/iNEddTyWiMfLSwFD6qGq.png)](https://chromewebstore.google.com/detail/rescriber/oglddlncokahjddccgjnnpdlgdbijcbl)
+
+[![Chrome Web Store version](https://img.shields.io/chrome-web-store/v/oglddlncokahjddccgjnnpdlgdbijcbl?label=version)](https://chromewebstore.google.com/detail/rescriber/oglddlncokahjddccgjnnpdlgdbijcbl)
+[![Chrome Web Store users](https://img.shields.io/chrome-web-store/users/oglddlncokahjddccgjnnpdlgdbijcbl?label=users)](https://chromewebstore.google.com/detail/rescriber/oglddlncokahjddccgjnnpdlgdbijcbl)
+[![Chrome Web Store rating](https://img.shields.io/chrome-web-store/rating/oglddlncokahjddccgjnnpdlgdbijcbl?label=rating)](https://chromewebstore.google.com/detail/rescriber/oglddlncokahjddccgjnnpdlgdbijcbl)
+
 > Rescriber is an independent project and is not affiliated with, endorsed by,
 > or sponsored by OpenAI. The model name `openai/privacy-filter` reflects the
 > Hugging Face publisher of the underlying open-weights model.
@@ -24,6 +30,12 @@ keeps only the Privacy Filter detection mode; the multi-backend variants
   WebGPU is disabled, just slower.
 
 ### Install (recommended)
+
+Install Rescriber from the
+[Chrome Web Store](https://chromewebstore.google.com/detail/rescriber/oglddlncokahjddccgjnnpdlgdbijcbl).
+One click, and updates ship automatically.
+
+### Install from a release zip
 
 1. Download the latest `rescriber-v1.0.1.zip` from the
    [Releases page](https://github.com/PEACH-Research-Lab/Rescriber/releases/latest).
